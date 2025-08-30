@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>מפת עדכונים – שליטת גלגל + אייקונים + רענון</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- MarkerCluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <style>
+    html,body {height:100%;margin:0}
+    body { overflow:hidden; font-family:system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial }
+    #map {height:100vh; width:100vw}
+    #toolbar{
+      position:fixed; top:8px; right:8px; z-index:1000;
+      background:#fff; border:1px solid #ddd; border-radius:12px; padding:10px;
+      box-shadow:0 6px 18px rgba(0,0,0,.08); max-width:420px; direction:rtl
+    }
+    .legend{font-size:12px; line-height:1.4; margin-bottom:.25rem}
+    .row{margin-top:.5rem}
+    .filters label{margin-inline-start:.5rem; white-space:nowrap}
+    .popup h4{margin:.2rem 0}
+    .popup small{color:#666}
+    .video-wrap{position:relative; padding-top:56.25%}
+    .video-wrap iframe{position:absolute; inset:0; width:100%; height:100%; border:0}
+    .muted{color:#666; font-size:12px}
+    button{cursor:pointer}
+    select, input[type="number"]{font:inherit}
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="legend"><b>פילטרים</b></div>
+  <div class="filters">
+    <label><input type="checkbox" id="f-ua" checked> צד אוקראיני</label>
+    <label><input type="checkbox" id="f-ru" checked> צד רוסי</label>
+    <label><input type="checkbox" id="f-neutral" checked> נייטרלי/אזרחי</label>
+  </div>
+
+  <div class="filters row">
+    <select id="frontFilter" title="סינון לפי חזית">
+      <option value="all">כל החזיתות</option>
+      <option value="north">צפון (סומי/קורסק)</option>
+      <option value="kharkiv">חרקוב/בלגורוד</option>
+      <option value="donetsk">דונצק/פוקרובסק</option>
+      <option value="zaporizhzhia">זפוריז'יה</option>
+      <option value="kherson">חרסון/קרים</option>
+      <option value="rear">עורף/תשתיות</option>
+    </select>
+  </div>
+
+  <!-- שליטת גלגל -->
+  <div class="filters row">
+    <label>מצב גלגל:
+      <select id="wheelMode">
+        <option value="native" selected>Leaflet (מובנה)</option>
+        <option value="custom">מותאם-אישית</option>
+      </select>
+    </label>
+    <span class="muted">|</span>
+    <label title="הפיכת כיוון (למי שהגלגל שלו מרגיש הפוך)">
+      <input type="checkbox" id="invertWheel"> הפוך כיוון
+    </label>
+    <label title="גודל צעד זום במצב המותאם">
+      צעד: <input type="number" id="wheelStep" value="0.25" min="0.05" max="1" step="0.05" style="width:70px">
+    </label>
+  </div>
+
+  <div class="row">
+    <button id="refreshBtn">רענון עכשיו</button>
+    <span id="status" class="muted">ממתין לטעינה…</span><br/>
+    <span id="lastUpdated" class="muted"></span>
+  </div>
+</div>
+
+<div id="map" aria-label="מפת עדכונים"></div>
+
+<script>
+/* ===== רענון נתונים ===== */
+const REFRESH_EVERY_MS = 2 * 60 * 1000;
+const statusEl = document.getElementById('status');
+const lastUpdatedEl = document.getElementById('lastUpdated');
+const refreshBtn = document.getElementById('refreshBtn');
+
+/* ===== מפה ===== */
+const map = L.map('map', {
+  zoomControl: true,
+  scrollWheelZoom: true,      // מתחילים עם המנגנון המובנה
+  touchZoom: 'center',
+  zoomSnap: 0.25,
+  zoomDelta: 0.25
+}).setView([48.9, 31.4], 6);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18, attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+
+const toolbarEl = document.getElementById('toolbar');
+L.DomEvent.disableScrollPropagation(toolbarEl);
+
+/* ===== אייקונים ===== */
+const iconUA = L.icon({ iconUrl: 'ua.png', iconSize: [28,20], iconAnchor: [14,10], popupAnchor: [0,-10] });
+const iconRU = L.icon({ iconUrl: 'ru.png', iconSize: [28,20], iconAnchor: [14,10], popupAnchor: [0,-10] });
+const iconNE = L.icon({ iconUrl: 'nu.png', iconSize: [24,24], iconAnchor: [12,12], popupAnchor: [0,-10] });
+function iconBySide(side){ return side==='ua'?iconUA : side==='ru'?iconRU : iconNE; }
+
+/* ===== קלאסטר ===== */
+const cluster = L.markerClusterGroup();
+map.addLayer(cluster);
+let markers = [];
+
+/* ===== פופאפים ===== */
+function buildPopup(item){
+  const date = new Date(item.date).toLocaleDateString('he-IL');
+  let mediaHTML = '';
+  if(item.media?.type==='youtube' && item.media.id){
+    mediaHTML = `<div class="video-wrap"><iframe src="https://www.youtube.com/embed/${item.media.id}" allowfullscreen></iframe></div>`;
+  }else if(item.media?.type==='link' && item.media.url){
+    mediaHTML = `<p><a href="${item.media.url}" target="_blank" rel="noopener">צפה בסרטון/מקור</a></p>`;
+  }
+  return `<div class="popup"><h4>${item.title}</h4><small>${date} • חזית: ${item.front}</small><p>${item.summary??''}</p>${mediaHTML}</div>`;
+}
+
+/* ===== ציור מרקרים ===== */
+function addMarkers(data){
+  markers.forEach(m=>cluster.removeLayer(m));
+  markers=[];
+  data.forEach(item=>{
+    const marker=L.marker([item.lat,item.lng],{icon:iconBySide(item.side)});
+    marker.bindPopup(buildPopup(item),{maxWidth:360});
+    markers.push(marker);
+    cluster.addLayer(marker);
+  });
+}
+
+/* ===== טעינת updates.json ===== */
+let updates=[]; let lastHash=null;
+async function fetchUpdates(){
+  statusEl.textContent='טוען עדכונים…';
+  const res=await fetch(`updates.json?t=${Date.now()}`,{cache:'no-store'});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data=await res.json();
+  const h=JSON.stringify(data);
+  const changed=h!==lastHash; lastHash=h;
+  return {data,changed};
+}
+async function loadUpdates(initial=false){
+  try{
+    const {data,changed}=await fetchUpdates();
+    updates=data;
+    if(initial||changed){ applyFilters(); lastUpdatedEl.textContent='עודכן: '+new Date().toLocaleTimeString('he-IL'); }
+    statusEl.textContent = initial ? 'נטען' : (changed ? 'נמצא עדכון חדש' : 'אין שינוי בנתונים');
+  }catch(e){ console.error(e); statusEl.textContent='שגיאה בטעינה'; }
+}
+loadUpdates(true); refreshBtn.addEventListener('click',()=>loadUpdates(false)); setInterval(()=>loadUpdates(false),REFRESH_EVERY_MS);
+
+/* ===== פילטרים ===== */
+const fUA=document.getElementById('f-ua');
+const fRU=document.getElementById('f-ru');
+const fNE=document.getElementById('f-neutral');
+const frontSel=document.getElementById('frontFilter');
+function applyFilters(){
+  const showUA=fUA.checked, showRU=fRU.checked, showNE=fNE.checked;
+  const front=frontSel.value;
+  const filtered=updates.filter(u=>{
+    const sideOK=(u.side==='ua'&&showUA)||(u.side==='ru'&&showRU)||(u.side!=='ua'&&u.side!=='ru'&&showNE);
+    const frontOK=(front==='all')||(u.front===front);
+    return sideOK&&frontOK;
+  });
+  addMarkers(filtered);
+}
+[fUA,fRU,fNE,frontSel].forEach(el=>el.addEventListener('change',applyFilters));
+
+/* ===== זום התחלה ===== */
+const boundsUkraine=L.latLngBounds([45.1,22.0],[52.6,40.3]);
+map.fitBounds(boundsUkraine);
+
+/* ===== שליטת גלגל דו־מצבית ===== */
+const wheelModeSel=document.getElementById('wheelMode');
+const invertWheelEl=document.getElementById('invertWheel');
+const wheelStepEl=document.getElementById('wheelStep');
+
+let invertWheel=false;
+let wheelStep=0.25;
+let customListener=null;
+
+function enableNativeWheel(){
+  // נקה מאזין מותאם אם היה
+  if(customListener){ map.getContainer().removeEventListener('wheel',customListener); customListener=null; }
+  map.scrollWheelZoom.enable();
+}
+function enableCustomWheel(){
+  map.scrollWheelZoom.disable();
+  const container=map.getContainer();
+  customListener=(e)=>{
+    e.preventDefault(); e.stopPropagation();
+    // נרמול deltaY עבור דפדפנים/טאצ'פדים שונים
+    let dy=e.deltaY;
+    if(e.deltaMode===1) dy*=15;        // line
+    else if(e.deltaMode===2) dy*=360;  // page
+    let dir=(dy<0)?1:-1;               // קדימה=זום־אין
+    if(invertWheel) dir*=-1;
+    const magnitude=Math.min(1,Math.abs(dy)/100)||0.2; // 0..1
+    const step=wheelStep*magnitude;
+    const target=map.getZoom()+(dir*step);
+    const pt=map.mouseEventToContainerPoint(e);
+    map.setZoomAround(pt,target);
+  };
+  container.addEventListener('wheel',customListener,{passive:false});
+}
+
+// התנהגות התחלתית
+enableNativeWheel();
+
+// UI
+wheelModeSel.addEventListener('change',()=>{
+  if(wheelModeSel.value==='native') enableNativeWheel();
+  else enableCustomWheel();
+});
+invertWheelEl.addEventListener('change',()=>{ invertWheel=invertWheelEl.checked; });
+wheelStepEl.addEventListener('change',()=>{
+  const v=parseFloat(wheelStepEl.value);
+  wheelStep=isNaN(v)?0.25:Math.max(0.05,Math.min(1,v));
+  wheelStepEl.value=wheelStep.toString();
+});
+</script>
+</body>
+</html>

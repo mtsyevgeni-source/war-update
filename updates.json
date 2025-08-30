@@ -1,0 +1,35 @@
+[
+  {
+    "id": 1,
+    "lat": 51.03,
+    "lng": 34.68,
+    "title": "קרבות ביונאקיבקה (סומי)",
+    "date": "2025-08-22",
+    "side": "ru",
+    "front": "north",
+    "media": {"type":"youtube", "id":"dQw4w9WgXcQ"},
+    "summary": "כוחות סער רוסים מתקדמים לעומק יונאקיבקה, לחימה כבדה באזור הגבול."
+  },
+  {
+    "id": 2,
+    "lat": 50.08,
+    "lng": 36.94,
+    "title": "וולצ'נסק – הגנה אוקראינית",
+    "date": "2025-08-23",
+    "side": "ua",
+    "front": "kharkiv",
+    "media": {"type":"link", "url":"https://example.com"},
+    "summary": "ניסיון בלימה בקרבות רחוב; שימוש במל״טים."
+  },
+  {
+    "id": 3,
+    "lat": 47.57,
+    "lng": 35.04,
+    "title": "זפוריז׳יה – תשתית אזרחית",
+    "date": "2025-08-21",
+    "side": "neutral",
+    "front": "zaporizhzhia",
+    "media": {"type":"youtube", "id":"VIDEO_ID"},
+    "summary": "דיווח על פגיעה בתעשייה מקומית."
+  }
+]
