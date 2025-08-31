@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <title>מפת עדכונים – נקודות + קו חזית</title>
+  <title>מפת עדכונים – נקודות + קו חזית (KML/JSON)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <!-- togeojson: המרה מ-KML ל-GeoJSON -->
+  <script src="https://unpkg.com/@tmcw/togeojson@4.5.0/dist/togeojson.umd.js"></script>
   <style>
     html,body {height:100%;margin:0}
     body { overflow:hidden; font-family:system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial }
@@ -29,12 +31,8 @@
     .video-wrap iframe{position:absolute; inset:0; width:100%; height:100%; border:0}
     .muted{color:#666; font-size:12px}
     button{cursor:pointer}
-    .line-legend{
-      display:flex; align-items:center; gap:6px; font-size:12px; color:#333
-    }
-    .line-chip{
-      width:22px; height:6px; border-radius:4px; display:inline-block; border:1px solid #0002
-    }
+    .line-legend{display:flex; align-items:center; gap:6px; font-size:12px; color:#333}
+    .line-chip{width:22px; height:6px; border-radius:4px; display:inline-block; border:1px solid #0002}
   </style>
 </head>
 <body>
@@ -123,7 +121,6 @@ function buildPopup(item){
 
 /* ===== ציור נקודות ===== */
 function drawPoints(points){
-  // נקה קודמים
   pointMarkers.forEach(m => cluster.removeLayer(m));
   pointMarkers = [];
   if(!Array.isArray(points)) return;
@@ -152,73 +149,102 @@ function drawPoints(points){
 }
 
 /* ===== ציור קו חזית ===== */
-function drawFrontline(coords){
-  // coords: [[lat,lng], [lat,lng], ...]
+function drawFrontlineCoords(coords){
   if(frontlineLayer){
     map.removeLayer(frontlineLayer);
     frontlineLayer = null;
   }
   if(!Array.isArray(coords) || coords.length < 2) return;
-
-  frontlineLayer = L.polyline(coords, {
-    color: '#f03',
-    weight: 3,
-    opacity: 0.9
-  }).addTo(map);
+  frontlineLayer = L.polyline(coords, { color:'#f03', weight:3, opacity:0.9 }).addTo(map);
 }
 
-/* ===== טעינה ===== */
+/* המרה מ-GeoJSON לקואורדינטות [lat,lng] */
+function coordsFromGeoJSON(geojson){
+  const out = [];
+  if(!geojson || !geojson.features) return out;
+  geojson.features.forEach(f=>{
+    const g = f.geometry;
+    if(!g) return;
+    if(g.type === 'LineString'){
+      g.coordinates.forEach(([lng,lat])=> out.push([lat,lng]));
+    } else if(g.type === 'MultiLineString'){
+      g.coordinates.forEach(line=>{
+        line.forEach(([lng,lat])=> out.push([lat,lng]));
+      });
+    }
+  });
+  return out;
+}
+
+/* ===== טעינת updates.json ===== */
 let lastHash = null;
-async function fetchUpdates(){
-  statusEl.textContent='טוען נתונים…';
+
+async function fetchJSON(){
   const res = await fetch(`updates.json?t=${Date.now()}`, {cache:'no-store'});
   if(!res.ok) throw new Error('HTTP '+res.status);
-  const data = await res.json();
-  const hash = JSON.stringify(data);
-  const changed = hash !== lastHash; lastHash = hash;
-  return {data, changed};
+  return res.json();
 }
 
-function normalizeData(raw){
-  // תמיכה ב-2 פורמטים:
-  // 1) מערך פשוט של נקודות (כמו קודם)
-  // 2) אובייקט עם { points:[...], frontline:[[lat,lng], ...] }
-  if(Array.isArray(raw)){
-    return { points: raw, frontline: [] };
-  } else if (raw && typeof raw === 'object'){
-    return {
-      points: Array.isArray(raw.points)? raw.points : [],
-      frontline: Array.isArray(raw.frontline)? raw.frontline : []
-    };
-  }
-  return { points: [], frontline: [] };
-}
-
-async function loadUpdates(initial=false){
+async function maybeLoadKml(kmlUrl){
   try{
-    const {data, changed} = await fetchUpdates();
-    const norm = normalizeData(data);
-    drawPoints(norm.points);
-    drawFrontline(norm.frontline);
-    lastUpdatedEl.textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
-    statusEl.textContent = (initial?'נטען':'') + (changed?' נמצא עדכון חדש':'');
+    const res = await fetch(kmlUrl);
+    if(!res.ok) throw new Error('KML HTTP '+res.status);
+    const text = await res.text();
+    const dom = new DOMParser().parseFromString(text, 'text/xml');
+    const gj = toGeoJSON.kml(dom); // -> GeoJSON
+    const coords = coordsFromGeoJSON(gj);
+    drawFrontlineCoords(coords);
   }catch(e){
+    console.error('KML load error:', e);
+  }
+}
+
+async function loadAll(initial=false){
+  try {
+    statusEl.textContent='טוען נתונים…';
+    const raw = await fetchJSON();
+    const hash = JSON.stringify(raw);
+    const changed = hash !== lastHash; lastHash = hash;
+
+    // נרמול מבנה
+    let points = [];
+    let frontline = [];
+    let frontlineKml = null;
+
+    if(Array.isArray(raw)){ // פורמט ישן: רק נקודות
+      points = raw;
+    } else if (raw && typeof raw === 'object'){
+      points = Array.isArray(raw.points) ? raw.points : [];
+      frontline = Array.isArray(raw.frontline) ? raw.frontline : [];
+      frontlineKml = typeof raw.frontlineKml === 'string' ? raw.frontlineKml : null;
+    }
+
+    drawPoints(points);
+    if(frontline.length >= 2){
+      drawFrontlineCoords(frontline);
+    } else if(frontlineKml){
+      await maybeLoadKml(frontlineKml);
+    }
+
+    lastUpdatedEl.textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
+    statusEl.textContent = changed ? 'נמצא עדכון חדש' : (initial ? 'נטען' : 'אין שינוי');
+  } catch (e){
     console.error(e);
     statusEl.textContent = 'שגיאה בטעינה';
   }
 }
 
-loadUpdates(true);
-refreshBtn.addEventListener('click', ()=>loadUpdates(false));
-setInterval(()=>loadUpdates(false), REFRESH_EVERY_MS);
+loadAll(true);
+refreshBtn.addEventListener('click', ()=>loadAll(false));
+setInterval(()=>loadAll(false), REFRESH_EVERY_MS);
 
 /* ===== התאמת תצוגה ראשונית ===== */
 const boundsUkraine = L.latLngBounds([45.1,22.0],[52.6,40.3]);
 map.fitBounds(boundsUkraine);
 
-/* ===== ריענון בעת שינוי פילטרים ===== */
+/* ריענון בעת שינוי פילטרים */
 ['f-ua','f-ru','f-neutral','frontFilter'].forEach(id=>{
-  document.getElementById(id).addEventListener('change', ()=>loadUpdates(false));
+  document.getElementById(id).addEventListener('change', ()=>loadAll(false));
 });
 </script>
 </body>
