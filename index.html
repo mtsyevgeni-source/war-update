@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <title>מפת עדכונים – שליטת גלגל + אייקונים + רענון</title>
+  <title>מפת עדכונים – נקודות + קו חזית</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -29,7 +29,12 @@
     .video-wrap iframe{position:absolute; inset:0; width:100%; height:100%; border:0}
     .muted{color:#666; font-size:12px}
     button{cursor:pointer}
-    select, input[type="number"]{font:inherit}
+    .line-legend{
+      display:flex; align-items:center; gap:6px; font-size:12px; color:#333
+    }
+    .line-chip{
+      width:22px; height:6px; border-radius:4px; display:inline-block; border:1px solid #0002
+    }
   </style>
 </head>
 <body>
@@ -54,21 +59,10 @@
     </select>
   </div>
 
-  <!-- שליטת גלגל -->
-  <div class="filters row">
-    <label>מצב גלגל:
-      <select id="wheelMode">
-        <option value="native" selected>Leaflet (מובנה)</option>
-        <option value="custom">מותאם-אישית</option>
-      </select>
-    </label>
-    <span class="muted">|</span>
-    <label title="הפיכת כיוון (למי שהגלגל שלו מרגיש הפוך)">
-      <input type="checkbox" id="invertWheel"> הפוך כיוון
-    </label>
-    <label title="גודל צעד זום במצב המותאם">
-      צעד: <input type="number" id="wheelStep" value="0.25" min="0.05" max="1" step="0.05" style="width:70px">
-    </label>
+  <div class="row">
+    <span class="line-legend">
+      <span class="line-chip" style="background:linear-gradient(90deg,#f03,#f69)"></span> קו חזית
+    </span>
   </div>
 
   <div class="row">
@@ -81,7 +75,7 @@
 <div id="map" aria-label="מפת עדכונים"></div>
 
 <script>
-/* ===== רענון נתונים ===== */
+/* ===== רענון ===== */
 const REFRESH_EVERY_MS = 2 * 60 * 1000;
 const statusEl = document.getElementById('status');
 const lastUpdatedEl = document.getElementById('lastUpdated');
@@ -90,7 +84,7 @@ const refreshBtn = document.getElementById('refreshBtn');
 /* ===== מפה ===== */
 const map = L.map('map', {
   zoomControl: true,
-  scrollWheelZoom: true,      // מתחילים עם המנגנון המובנה
+  scrollWheelZoom: true,
   touchZoom: 'center',
   zoomSnap: 0.25,
   zoomDelta: 0.25
@@ -109,124 +103,122 @@ const iconRU = L.icon({ iconUrl: 'ru.png', iconSize: [28,20], iconAnchor: [14,10
 const iconNE = L.icon({ iconUrl: 'nu.png', iconSize: [24,24], iconAnchor: [12,12], popupAnchor: [0,-10] });
 function iconBySide(side){ return side==='ua'?iconUA : side==='ru'?iconRU : iconNE; }
 
-/* ===== קלאסטר ===== */
+/* ===== שכבות ===== */
 const cluster = L.markerClusterGroup();
 map.addLayer(cluster);
-let markers = [];
+let pointMarkers = [];
+let frontlineLayer = null;
 
 /* ===== פופאפים ===== */
 function buildPopup(item){
-  const date = new Date(item.date).toLocaleDateString('he-IL');
+  const date = item.date ? new Date(item.date).toLocaleDateString('he-IL') : '';
   let mediaHTML = '';
-  if(item.media?.type==='youtube' && item.media.id){
+  if(item.media?.type === 'youtube' && item.media.id){
     mediaHTML = `<div class="video-wrap"><iframe src="https://www.youtube.com/embed/${item.media.id}" allowfullscreen></iframe></div>`;
-  }else if(item.media?.type==='link' && item.media.url){
+  } else if(item.media?.type === 'link' && item.media.url){
     mediaHTML = `<p><a href="${item.media.url}" target="_blank" rel="noopener">צפה בסרטון/מקור</a></p>`;
   }
-  return `<div class="popup"><h4>${item.title}</h4><small>${date} • חזית: ${item.front}</small><p>${item.summary??''}</p>${mediaHTML}</div>`;
+  return `<div class="popup"><h4>${item.title??'עדכון'}</h4><small>${date}${item.front?` • חזית: ${item.front}`:''}</small><p>${item.summary??''}</p>${mediaHTML}</div>`;
 }
 
-/* ===== ציור מרקרים ===== */
-function addMarkers(data){
-  markers.forEach(m=>cluster.removeLayer(m));
-  markers=[];
-  data.forEach(item=>{
-    const marker=L.marker([item.lat,item.lng],{icon:iconBySide(item.side)});
-    marker.bindPopup(buildPopup(item),{maxWidth:360});
-    markers.push(marker);
+/* ===== ציור נקודות ===== */
+function drawPoints(points){
+  // נקה קודמים
+  pointMarkers.forEach(m => cluster.removeLayer(m));
+  pointMarkers = [];
+  if(!Array.isArray(points)) return;
+
+  const showUA = document.getElementById('f-ua').checked;
+  const showRU = document.getElementById('f-ru').checked;
+  const showNE = document.getElementById('f-neutral').checked;
+  const frontSel = document.getElementById('frontFilter').value;
+
+  points.forEach(item=>{
+    const lat = parseFloat(item.lat), lng = parseFloat(item.lng);
+    if(isNaN(lat) || isNaN(lng)) return;
+
+    const side = (item.side||'neutral').toLowerCase();
+    const front = item.front || 'all';
+
+    const sideOK = (side==='ua'&&showUA) || (side==='ru'&&showRU) || ((side!=='ua'&&side!=='ru')&&showNE);
+    const frontOK = (frontSel==='all') || (frontSel===front);
+    if(!sideOK || !frontOK) return;
+
+    const marker = L.marker([lat,lng], {icon: iconBySide(side)});
+    marker.bindPopup(buildPopup(item), {maxWidth: 360});
+    pointMarkers.push(marker);
     cluster.addLayer(marker);
   });
 }
 
-/* ===== טעינת updates.json ===== */
-let updates=[]; let lastHash=null;
-async function fetchUpdates(){
-  statusEl.textContent='טוען עדכונים…';
-  const res=await fetch(`updates.json?t=${Date.now()}`,{cache:'no-store'});
-  if(!res.ok) throw new Error('HTTP '+res.status);
-  const data=await res.json();
-  const h=JSON.stringify(data);
-  const changed=h!==lastHash; lastHash=h;
-  return {data,changed};
+/* ===== ציור קו חזית ===== */
+function drawFrontline(coords){
+  // coords: [[lat,lng], [lat,lng], ...]
+  if(frontlineLayer){
+    map.removeLayer(frontlineLayer);
+    frontlineLayer = null;
+  }
+  if(!Array.isArray(coords) || coords.length < 2) return;
+
+  frontlineLayer = L.polyline(coords, {
+    color: '#f03',
+    weight: 3,
+    opacity: 0.9
+  }).addTo(map);
 }
+
+/* ===== טעינה ===== */
+let lastHash = null;
+async function fetchUpdates(){
+  statusEl.textContent='טוען נתונים…';
+  const res = await fetch(`updates.json?t=${Date.now()}`, {cache:'no-store'});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  const hash = JSON.stringify(data);
+  const changed = hash !== lastHash; lastHash = hash;
+  return {data, changed};
+}
+
+function normalizeData(raw){
+  // תמיכה ב-2 פורמטים:
+  // 1) מערך פשוט של נקודות (כמו קודם)
+  // 2) אובייקט עם { points:[...], frontline:[[lat,lng], ...] }
+  if(Array.isArray(raw)){
+    return { points: raw, frontline: [] };
+  } else if (raw && typeof raw === 'object'){
+    return {
+      points: Array.isArray(raw.points)? raw.points : [],
+      frontline: Array.isArray(raw.frontline)? raw.frontline : []
+    };
+  }
+  return { points: [], frontline: [] };
+}
+
 async function loadUpdates(initial=false){
   try{
-    const {data,changed}=await fetchUpdates();
-    updates=data;
-    if(initial||changed){ applyFilters(); lastUpdatedEl.textContent='עודכן: '+new Date().toLocaleTimeString('he-IL'); }
-    statusEl.textContent = initial ? 'נטען' : (changed ? 'נמצא עדכון חדש' : 'אין שינוי בנתונים');
-  }catch(e){ console.error(e); statusEl.textContent='שגיאה בטעינה'; }
+    const {data, changed} = await fetchUpdates();
+    const norm = normalizeData(data);
+    drawPoints(norm.points);
+    drawFrontline(norm.frontline);
+    lastUpdatedEl.textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
+    statusEl.textContent = (initial?'נטען':'') + (changed?' נמצא עדכון חדש':'');
+  }catch(e){
+    console.error(e);
+    statusEl.textContent = 'שגיאה בטעינה';
+  }
 }
-loadUpdates(true); refreshBtn.addEventListener('click',()=>loadUpdates(false)); setInterval(()=>loadUpdates(false),REFRESH_EVERY_MS);
 
-/* ===== פילטרים ===== */
-const fUA=document.getElementById('f-ua');
-const fRU=document.getElementById('f-ru');
-const fNE=document.getElementById('f-neutral');
-const frontSel=document.getElementById('frontFilter');
-function applyFilters(){
-  const showUA=fUA.checked, showRU=fRU.checked, showNE=fNE.checked;
-  const front=frontSel.value;
-  const filtered=updates.filter(u=>{
-    const sideOK=(u.side==='ua'&&showUA)||(u.side==='ru'&&showRU)||(u.side!=='ua'&&u.side!=='ru'&&showNE);
-    const frontOK=(front==='all')||(u.front===front);
-    return sideOK&&frontOK;
-  });
-  addMarkers(filtered);
-}
-[fUA,fRU,fNE,frontSel].forEach(el=>el.addEventListener('change',applyFilters));
+loadUpdates(true);
+refreshBtn.addEventListener('click', ()=>loadUpdates(false));
+setInterval(()=>loadUpdates(false), REFRESH_EVERY_MS);
 
-/* ===== זום התחלה ===== */
-const boundsUkraine=L.latLngBounds([45.1,22.0],[52.6,40.3]);
+/* ===== התאמת תצוגה ראשונית ===== */
+const boundsUkraine = L.latLngBounds([45.1,22.0],[52.6,40.3]);
 map.fitBounds(boundsUkraine);
 
-/* ===== שליטת גלגל דו־מצבית ===== */
-const wheelModeSel=document.getElementById('wheelMode');
-const invertWheelEl=document.getElementById('invertWheel');
-const wheelStepEl=document.getElementById('wheelStep');
-
-let invertWheel=false;
-let wheelStep=0.25;
-let customListener=null;
-
-function enableNativeWheel(){
-  // נקה מאזין מותאם אם היה
-  if(customListener){ map.getContainer().removeEventListener('wheel',customListener); customListener=null; }
-  map.scrollWheelZoom.enable();
-}
-function enableCustomWheel(){
-  map.scrollWheelZoom.disable();
-  const container=map.getContainer();
-  customListener=(e)=>{
-    e.preventDefault(); e.stopPropagation();
-    // נרמול deltaY עבור דפדפנים/טאצ'פדים שונים
-    let dy=e.deltaY;
-    if(e.deltaMode===1) dy*=15;        // line
-    else if(e.deltaMode===2) dy*=360;  // page
-    let dir=(dy<0)?1:-1;               // קדימה=זום־אין
-    if(invertWheel) dir*=-1;
-    const magnitude=Math.min(1,Math.abs(dy)/100)||0.2; // 0..1
-    const step=wheelStep*magnitude;
-    const target=map.getZoom()+(dir*step);
-    const pt=map.mouseEventToContainerPoint(e);
-    map.setZoomAround(pt,target);
-  };
-  container.addEventListener('wheel',customListener,{passive:false});
-}
-
-// התנהגות התחלתית
-enableNativeWheel();
-
-// UI
-wheelModeSel.addEventListener('change',()=>{
-  if(wheelModeSel.value==='native') enableNativeWheel();
-  else enableCustomWheel();
-});
-invertWheelEl.addEventListener('change',()=>{ invertWheel=invertWheelEl.checked; });
-wheelStepEl.addEventListener('change',()=>{
-  const v=parseFloat(wheelStepEl.value);
-  wheelStep=isNaN(v)?0.25:Math.max(0.05,Math.min(1,v));
-  wheelStepEl.value=wheelStep.toString();
+/* ===== ריענון בעת שינוי פילטרים ===== */
+['f-ua','f-ru','f-neutral','frontFilter'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=>loadUpdates(false));
 });
 </script>
 </body>
