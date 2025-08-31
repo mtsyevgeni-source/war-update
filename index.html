@@ -105,7 +105,7 @@ function iconBySide(side){ return side==='ua'?iconUA : side==='ru'?iconRU : icon
 const cluster = L.markerClusterGroup();
 map.addLayer(cluster);
 let pointMarkers = [];
-let frontlineLayer = null;
+let frontlineGroup = L.layerGroup().addTo(map);
 
 /* ===== פופאפים ===== */
 function buildPopup(item){
@@ -119,7 +119,7 @@ function buildPopup(item){
   return `<div class="popup"><h4>${item.title??'עדכון'}</h4><small>${date}${item.front?` • חזית: ${item.front}`:''}</small><p>${item.summary??''}</p>${mediaHTML}</div>`;
 }
 
-/* ===== ציור נקודות ===== */
+/* ===== נקודות ===== */
 function drawPoints(points){
   pointMarkers.forEach(m => cluster.removeLayer(m));
   pointMarkers = [];
@@ -141,39 +141,41 @@ function drawPoints(points){
     const frontOK = (frontSel==='all') || (frontSel===front);
     if(!sideOK || !frontOK) return;
 
-    const marker = L.marker([lat,lng], {icon: iconBySide(side)});
-    marker.bindPopup(buildPopup(item), {maxWidth: 360});
+    const marker = L.marker([lat,lng], {icon: iconBySide(side)}).bindPopup(buildPopup(item), {maxWidth: 360});
     pointMarkers.push(marker);
     cluster.addLayer(marker);
   });
 }
 
-/* ===== ציור קו חזית ===== */
-function drawFrontlineCoords(coords){
-  if(frontlineLayer){
-    map.removeLayer(frontlineLayer);
-    frontlineLayer = null;
-  }
-  if(!Array.isArray(coords) || coords.length < 2) return;
-  frontlineLayer = L.polyline(coords, { color:'#f03', weight:3, opacity:0.9 }).addTo(map);
-}
+/* ===== קו חזית: מציירים כל קטע בנפרד ===== */
+function drawFrontlineSegmentsFromGeoJSON(geojson){
+  frontlineGroup.clearLayers();
+  if(!geojson || !Array.isArray(geojson.features)) return;
 
-/* המרה מ-GeoJSON לקואורדינטות [lat,lng] */
-function coordsFromGeoJSON(geojson){
-  const out = [];
-  if(!geojson || !geojson.features) return out;
+  const style = { color:'#f03', weight:3, opacity:0.9 };
+
   geojson.features.forEach(f=>{
     const g = f.geometry;
     if(!g) return;
+
+    // LineString – קטע יחיד
     if(g.type === 'LineString'){
-      g.coordinates.forEach(([lng,lat])=> out.push([lat,lng]));
-    } else if(g.type === 'MultiLineString'){
+      const latlngs = g.coordinates.map(([lng,lat]) => [lat,lng]);
+      if(latlngs.length >= 2){
+        L.polyline(latlngs, style).addTo(frontlineGroup);
+      }
+    }
+
+    // MultiLineString – כמה קטעים נפרדים
+    if(g.type === 'MultiLineString'){
       g.coordinates.forEach(line=>{
-        line.forEach(([lng,lat])=> out.push([lat,lng]));
+        const latlngs = line.map(([lng,lat]) => [lat,lng]);
+        if(latlngs.length >= 2){
+          L.polyline(latlngs, style).addTo(frontlineGroup);
+        }
       });
     }
   });
-  return out;
 }
 
 /* ===== טעינת updates.json ===== */
@@ -185,18 +187,13 @@ async function fetchJSON(){
   return res.json();
 }
 
-async function maybeLoadKml(kmlUrl){
-  try{
-    const res = await fetch(kmlUrl);
-    if(!res.ok) throw new Error('KML HTTP '+res.status);
-    const text = await res.text();
-    const dom = new DOMParser().parseFromString(text, 'text/xml');
-    const gj = toGeoJSON.kml(dom); // -> GeoJSON
-    const coords = coordsFromGeoJSON(gj);
-    drawFrontlineCoords(coords);
-  }catch(e){
-    console.error('KML load error:', e);
-  }
+async function loadKmlAndDraw(kmlUrl){
+  const res = await fetch(kmlUrl);
+  if(!res.ok) throw new Error('KML HTTP '+res.status);
+  const text = await res.text();
+  const dom = new DOMParser().parseFromString(text, 'text/xml');
+  const gj = toGeoJSON.kml(dom); // GeoJSON
+  drawFrontlineSegmentsFromGeoJSON(gj);
 }
 
 async function loadAll(initial=false){
@@ -220,10 +217,13 @@ async function loadAll(initial=false){
     }
 
     drawPoints(points);
+
+    frontlineGroup.clearLayers();
     if(frontline.length >= 2){
-      drawFrontlineCoords(frontline);
+      // אם מגיע כקואורדינטות – גם כאן לא מחברים הכל; מציירים קטע אחד
+      L.polyline(frontline, {color:'#f03', weight:3, opacity:0.9}).addTo(frontlineGroup);
     } else if(frontlineKml){
-      await maybeLoadKml(frontlineKml);
+      await loadKmlAndDraw(frontlineKml);
     }
 
     lastUpdatedEl.textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
