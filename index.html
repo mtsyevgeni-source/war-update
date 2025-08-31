@@ -2,32 +2,25 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <title>מפת עדכונים – קו חזית נקי + קווי התקדמות</title>
+  <title>מפת עדכונים – קו חזית + קווי התקדמות</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
 
-  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- MarkerCluster -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
-  <!-- PolylineDecorator (לחצים על קווי התקדמות שלנו בלבד) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.polylinedecorator/1.7.0/leaflet.polylineDecorator.min.js"></script>
-
-  <!-- Omnivore – טעינת KML/GeoJSON -->
   <script src="https://unpkg.com/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
 
   <style>
     html,body{height:100%;margin:0}
-    body{overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     #map{height:100vh;width:100vw}
     #toolbar{
-      position:fixed;top:8px;right:8px;z-index:1000;
-      background:#fff;border:1px solid #ddd;border-radius:12px;padding:10px 12px;
-      box-shadow:0 6px 18px rgba(0,0,0,.08);max-width:560px;line-height:1.4
+      position:fixed;top:8px;right:8px;z-index:1000;background:#fff;border:1px solid #ddd;
+      border-radius:12px;padding:10px 12px;box-shadow:0 6px 18px rgba(0,0,0,.08);max-width:560px
     }
     .row{margin-top:.5rem}
     .small{font-size:12px;color:#666}
@@ -37,8 +30,7 @@
   </style>
 </head>
 <body>
-
-<div id="toolbar" aria-label="לוח בקרה">
+<div id="toolbar">
   <div class="flex">
     <label><input type="checkbox" id="layer-frontline" checked> קו חזית</label>
     <label><input type="checkbox" id="layer-lines" checked> קווי התקדמות</label>
@@ -46,11 +38,9 @@
     <span class="small">
       <span class="chip" style="background:#000"></span> חזית
       <span class="chip" style="background:#e53935"></span> רוסי
-      <span class="chip" style="background:#1e88e5"></span> אוקראיני
-      • דהוי = &gt;14 יום
+      <span class="chip" style="background:#1e88e5"></span> אוקראיני • דהוי=&gt;14 יום
     </span>
   </div>
-
   <div class="row"><b>גלגל עכבר</b></div>
   <div class="flex">
     <label><input type="checkbox" id="wheel-enabled" checked> פעיל</label>
@@ -60,264 +50,215 @@
     </label>
     <span id="wheel-sens-label" class="small">×1.00</span>
   </div>
-
   <div class="row">
     <button id="refresh">רענון עכשיו</button>
     <span id="status" class="small">ממתין לטעינה…</span><br>
     <span id="last" class="small"></span>
   </div>
 </div>
-
 <div id="map"></div>
 
 <script>
-/* ===== קבועים ===== */
 const FADE_AFTER_DAYS = 14;
 const COLOR_RU = '#e53935';
 const COLOR_UA = '#1e88e5';
-const COLOR_FL = '#000000';
+const COLOR_FL = '#000';
 const REFRESH_MS = 120000;
 
-/* קישור KML של Google My Maps (ה- mid שלך) */
+// KML של המפה ששלחת
 const MYMAPS_KML = 'https://www.google.com/maps/d/kml?mid=1lscRK6ehG0l2V-XvJ16nsyblMsQ&forcekml=1';
 
-/* ===== מפה ===== */
+// מפה
 const map = L.map('map', {
-  zoomControl: true,
-  scrollWheelZoom: true,
-  wheelDebounceTime: 40,
-  wheelPxPerZoomLevel: 80,
-  touchZoom: 'center',
-  zoomSnap: 0.25,
-  zoomDelta: 0.25
-}).setView([48.9, 31.4], 6);
+  zoomControl:true, scrollWheelZoom:true,
+  wheelDebounceTime:40, wheelPxPerZoomLevel:80,
+  touchZoom:'center', zoomSnap:0.25, zoomDelta:0.25
+}).setView([48.9,31.4],6);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 18, attribution: '&copy; OpenStreetMap'
-}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap'}).addTo(map);
 
-const toolbar = document.getElementById('toolbar');
-L.DomEvent.disableScrollPropagation(toolbar);
-toolbar.addEventListener('wheel', e=>e.stopPropagation(), {passive:false});
+// למנוע גלילה כשעומדים על הפאנל
+const panel = document.getElementById('toolbar');
+L.DomEvent.disableScrollPropagation(panel);
+panel.addEventListener('wheel', e=>e.stopPropagation(), {passive:false});
 
-const boundsUkraine = L.latLngBounds([45.1,22.0],[52.6,40.3]);
-map.fitBounds(boundsUkraine);
+// להתמקד לאזור אוקראינה
+const boundsUA = L.latLngBounds([45.1,22],[52.6,40.3]);
+map.fitBounds(boundsUA);
 
-/* ===== שכבות ===== */
+// שכבות
 const frontlineGroup = L.layerGroup().addTo(map);
 const linesGroup     = L.layerGroup().addTo(map);
 const arrowsGroup    = L.layerGroup().addTo(map);
-const cluster        = L.markerClusterGroup();
-map.addLayer(cluster);
+const cluster        = L.markerClusterGroup().addTo(map);
 
-/* ===== אייקונים לנקודות ===== */
-const iconUA = L.icon({ iconUrl:'ua.png', iconSize:[28,20], iconAnchor:[14,10], popupAnchor:[0,-10] });
-const iconRU = L.icon({ iconUrl:'ru.png', iconSize:[28,20], iconAnchor:[14,10], popupAnchor:[0,-10] });
-const iconNE = L.icon({ iconUrl:'nu.png', iconSize:[24,24], iconAnchor:[12,12], popupAnchor:[0,-10] });
-function iconBySide(s){ return s==='ua'?iconUA : s==='ru'?iconRU : iconNE; }
+// אייקונים
+const iconUA = L.icon({iconUrl:'ua.png',iconSize:[28,20],iconAnchor:[14,10],popupAnchor:[0,-10]});
+const iconRU = L.icon({iconUrl:'ru.png',iconSize:[28,20],iconAnchor:[14,10],popupAnchor:[0,-10]});
+const iconNE = L.icon({iconUrl:'nu.png',iconSize:[24,24],iconAnchor:[12,12],popupAnchor:[0,-10]});
+const iconBySide = s => s==='ua'?iconUA:s==='ru'?iconRU:iconNE;
 
-/* ===== גלגל (invert/רגישות) ===== */
-const wheelEnabled = document.getElementById('wheel-enabled');
-const wheelInvert  = document.getElementById('wheel-invert');
-const wheelSens    = document.getElementById('wheel-sens');
-const wheelLabel   = document.getElementById('wheel-sens-label');
-
-let customWheelAttached = false;
+// שליטת גלגל
+const wheelEnabled=document.getElementById('wheel-enabled');
+const wheelInvert =document.getElementById('wheel-invert');
+const wheelSens   =document.getElementById('wheel-sens');
+const wheelLabel  =document.getElementById('wheel-sens-label');
+let customWheelAttached=false;
 function customWheelHandler(e){
   if(!wheelEnabled.checked) return;
   e.preventDefault();
-  const dir = (wheelInvert.checked ? -1 : 1) * Math.sign(e.deltaY);
-  const step = 0.25 * parseFloat(wheelSens.value);
-  map.setZoomAround(e, map.getZoom() - dir*step);
+  const dir=(wheelInvert.checked?-1:1)*Math.sign(e.deltaY);
+  const step=0.25*parseFloat(wheelSens.value);
+  map.setZoomAround(e, map.getZoom()-dir*step);
 }
-function applyWheelMode(){
+function applyWheel(){
   if(!wheelEnabled.checked){
     map.scrollWheelZoom.disable();
-    if(customWheelAttached){ map._container.removeEventListener('wheel', customWheelHandler, {passive:false}); customWheelAttached=false; }
+    if(customWheelAttached){ map._container.removeEventListener('wheel',customWheelHandler,{passive:false}); customWheelAttached=false; }
   }else if(wheelInvert.checked){
     map.scrollWheelZoom.disable();
-    if(!customWheelAttached){ map._container.addEventListener('wheel', customWheelHandler, {passive:false}); customWheelAttached=true; }
+    if(!customWheelAttached){ map._container.addEventListener('wheel',customWheelHandler,{passive:false}); customWheelAttached=true; }
   }else{
-    if(customWheelAttached){ map._container.removeEventListener('wheel', customWheelHandler, {passive:false}); customWheelAttached=false; }
+    if(customWheelAttached){ map._container.removeEventListener('wheel',customWheelHandler,{passive:false}); customWheelAttached=false; }
     map.scrollWheelZoom.enable();
   }
-  wheelLabel.textContent = '×' + parseFloat(wheelSens.value).toFixed(2);
+  wheelLabel.textContent = '×'+parseFloat(wheelSens.value).toFixed(2);
 }
-wheelEnabled.addEventListener('change', applyWheelMode);
-wheelInvert .addEventListener('change', applyWheelMode);
-wheelSens   .addEventListener('input', ()=>wheelLabel.textContent='×'+parseFloat(wheelSens.value).toFixed(2));
-applyWheelMode();
+wheelEnabled.addEventListener('change',applyWheel);
+wheelInvert .addEventListener('change',applyWheel);
+wheelSens   .addEventListener('input',()=>wheelLabel.textContent='×'+parseFloat(wheelSens.value).toFixed(2));
+applyWheel();
 
-/* ===== עיצוב ===== */
-function styleForLine(side, dateStr){
+// עיצוב
+function styleForLine(side,dateStr){
   const color = side==='ua'?COLOR_UA:COLOR_RU;
-  let opacity = 0.95;
+  let opacity=0.95;
   if(dateStr){
-    const days = (Date.now() - new Date(dateStr)) / 86400000;
-    if(days > FADE_AFTER_DAYS) opacity = 0.35;
+    const days=(Date.now()-new Date(dateStr))/86400000;
+    if(days>FADE_AFTER_DAYS) opacity=0.35;
   }
-  return { color, weight: 3, opacity };
+  return {color,weight:3,opacity};
 }
-function styleFrontLine(){ return { color: COLOR_FL, weight: 3.5, opacity: 0.9 }; }
+const styleFront = {color:COLOR_FL,weight:3.5,opacity:0.9};
 
-/* חישוב אורך פוליליין בק״מ */
-function polylineKm(latlngs){
-  let km = 0;
-  for(let i=1;i<latlngs.length;i++){
-    km += map.distance(latlngs[i-1], latlngs[i]) / 1000;
-  }
-  return km;
-}
+// ק"מ
+function polyKm(latlngs){ let km=0; for(let i=1;i<latlngs.length;i++) km+=map.distance(latlngs[i-1],latlngs[i])/1000; return km; }
+// חלק בתוך תיבה
+function fracInBox(latlngs,box){ let n=0; latlngs.forEach(ll=>{ if(box.contains(ll)) n++; }); return n/latlngs.length; }
 
-/* בדיקה אם רוב הנקודות בתוך תיבת חזית */
-function fractionInBox(latlngs, box){
-  let inside = 0;
-  latlngs.forEach(ll => { if(box.contains(ll)) inside++; });
-  return inside / latlngs.length;
-}
+// תיבת חזית ממוקדת (דרום–מזרח)
+const FRONT_BOX = L.latLngBounds([46.3, 28.0],[50.6, 40.8]);
 
-/* תיבת חזית ממוקדת (מכסה דונבאס, זפוריז׳ה, חרסון; מדלגת על צפ׳ אוקראינה) */
-const FRONT_BOX = L.latLngBounds([45.0, 28.0], [50.8, 40.8]);
+// זיהוי שם שכבה: רק “קו חזית/מגע”
+const NAME_RE = /(front\s*line|line\s*of\s*contact|contact\s*line|Линия\s*фронта|Линия\s*соприкосновения|линия\s*фронта|линия\s*контакта|ליניית?ה|קו\s*חזית|קו\s*מגע)/i;
 
-/* ===== טעינה ===== */
-const statusEl = document.getElementById('status');
-const lastEl   = document.getElementById('last');
-const btnRefresh = document.getElementById('refresh');
+const statusEl=document.getElementById('status');
+const lastEl=document.getElementById('last');
+const refreshBtn=document.getElementById('refresh');
+const chkFront = document.getElementById('layer-frontline');
+const chkLines = document.getElementById('layer-lines');
+const chkPts   = document.getElementById('layer-points');
 
-const layerFrontChk = document.getElementById('layer-frontline');
-const layerLinesChk = document.getElementById('layer-lines');
-const layerPointsChk= document.getElementById('layer-points');
-
-function clearLayers(){
+function clearAll(){
   frontlineGroup.clearLayers();
   linesGroup.clearLayers();
   arrowsGroup.clearLayers();
   cluster.clearLayers();
 }
 
-/* --- 1) קו חזית עם סינון לפי שם שכבה + מסכת מיקום --- */
+// === 1) טעינת חזית עם סינון מחמיר ===
 function loadFrontlineFromKML(){
-  if(!layerFrontChk.checked) return;
+  if(!chkFront.checked) return;
 
-  const MIN_SEG_KM = 8;   // סף נמוך כדי לאסוף חלקים בינוניים שקשורים לחזית
-  const KEEP_TOP   = 3;   // נשמור את שלושת הארוכים ביותר אחרי הסינון
-
-  const NAME_RE = /(front|contact|line|frontline|контакт|линия|фронт|линия\s*фронта)/i;
+  const MIN_KM = 4;         // סף אורך מינימלי לכל מקטע
+  const MIN_FRAC = 0.65;    // לפחות 65% מהנקודות בתוך תיבת החזית
 
   omnivore.kml(MYMAPS_KML)
     .on('ready', function(){
-      const candidates = [];
+      let added=0;
       const gj = this.toGeoJSON();
 
       gj.features.forEach(f=>{
         if(!f.geometry) return;
 
-        const name = (f.properties && (f.properties.name || f.properties.Name || f.properties.title)) || '';
-        const isLikelyFront = NAME_RE.test(String(name));
+        const name = (f.properties && (f.properties.name||f.properties.Name||f.properties.title)) || '';
+        const nameHit = NAME_RE.test(String(name));
 
-        const pushLine = (coords) => {
+        const pushLine = (coords)=>{
           if(!coords || coords.length<2) return;
-          const latlngs = coords.map(c=>L.latLng(c[1], c[0]));
-          const km = polylineKm(latlngs);
+          const latlngs = coords.map(c=>L.latLng(c[1],c[0]));
+          const km = polyKm(latlngs);
+          const frac = fracInBox(latlngs, FRONT_BOX);
 
-          // תנאי סינון:
-          // (א) אם שם שכבה רומז על חזית – נכלול (אם יש אורך סביר)
-          // (ב) אחרת – נכלול רק אם רוב הנקודות בתיבת החזית AND האורך מעל סף
-          const frac = fractionInBox(latlngs, FRONT_BOX);
-          const passes = (isLikelyFront && km>=MIN_SEG_KM) || (frac>=0.7 && km>=MIN_SEG_KM);
-
-          if(passes){
-            candidates.push({km, latlngs});
+          // חייבים גם התאמה בשם שכבה וגם התאמה גיאוגרפית/אורך
+          const pass = (nameHit && frac>=MIN_FRAC && km>=MIN_KM);
+          if(pass){
+            L.polyline(latlngs, styleFront).addTo(frontlineGroup);
+            added++;
           }
         };
 
-        if(f.geometry.type === 'LineString'){
-          pushLine(f.geometry.coordinates);
-        } else if(f.geometry.type === 'MultiLineString'){
-          f.geometry.coordinates.forEach(pushLine);
-        }
+        if(f.geometry.type==='LineString'){ pushLine(f.geometry.coordinates); }
+        else if(f.geometry.type==='MultiLineString'){ f.geometry.coordinates.forEach(pushLine); }
       });
 
-      candidates.sort((a,b)=>b.km - a.km);
-      const kept = candidates.slice(0, KEEP_TOP);
-
-      kept.forEach(c=>{
-        L.polyline(c.latlngs, styleFrontLine()).addTo(frontlineGroup);
-      });
-
-      statusEl.textContent = kept.length ? `קו חזית סונן (${kept.length} מקטעים)` : 'לא זוהתה חזית בקובץ';
+      statusEl.textContent = added ? `חזית: ${added} מקטעים` : 'לא נמצאה שכבת חזית (שם שכבה לא תאם).';
     })
-    .on('error', ()=>{ statusEl.textContent = 'שגיאה בטעינת KML'; });
+    .on('error', ()=>{ statusEl.textContent='שגיאה בטעינת KML'; });
 }
 
-/* --- 2) קווי התקדמות / נקודות מה-JSON שלנו --- */
+// === 2) קווי התקדמות/נקודות מה-JSON שלך ===
 async function loadAdvancesAndPoints(){
   try{
-    const res = await fetch('updates.json?t='+Date.now(), {cache:'no-store'});
-    if(!res.ok) return;
-    const data = await res.json();
+    const r = await fetch('updates.json?t='+Date.now(), {cache:'no-store'});
+    if(!r.ok) return;
+    const data = await r.json();
 
-    if(layerLinesChk.checked && Array.isArray(data.advances)){
+    if(chkLines.checked && Array.isArray(data.advances)){
       data.advances.forEach(seg=>{
-        if(!Array.isArray(seg.coords) || seg.coords.length<2) return;
+        if(!Array.isArray(seg.coords)||seg.coords.length<2) return;
         const st = styleForLine((seg.side||'ru').toLowerCase(), seg.date);
         const pl = L.polyline(seg.coords, st).addTo(linesGroup);
-
-        const decorator = L.polylineDecorator(pl, {
-          patterns: [
-            {
-              offset: '10%',
-              repeat: '20%',
-              symbol: L.Symbol.arrowHead({
-                pixelSize: 10,
-                polygon: false,
-                pathOptions: { stroke:true, color: st.color, weight: 2, opacity: st.opacity }
-              })
-            }
-          ]
+        const deco = L.polylineDecorator(pl,{
+          patterns:[{offset:'10%',repeat:'20%',symbol:L.Symbol.arrowHead({pixelSize:10,polygon:false,pathOptions:{stroke:true,color:st.color,weight:2,opacity:st.opacity}})}]
         });
-        arrowsGroup.addLayer(decorator);
+        arrowsGroup.addLayer(deco);
       });
     }
 
-    if(layerPointsChk.checked && Array.isArray(data.points)){
+    if(chkPts.checked && Array.isArray(data.points)){
       data.points.forEach(p=>{
-        const lat = parseFloat(p.lat), lng = parseFloat(p.lng);
-        if(isNaN(lat)||isNaN(lng)) return;
-        const side = (p.side||'neutral').toLowerCase();
-        const marker = L.marker([lat,lng], {icon: iconBySide(side)});
-        let html = `<div class="popup"><h4>${p.title||'עדכון'}</h4>`;
-        if(p.date) html += `<div class="small">${new Date(p.date).toLocaleDateString('he-IL')}</div>`;
-        if(p.summary) html += `<p>${p.summary}</p>`;
-        if(p.media?.type==='youtube' && p.media.id){
-          html += `<div style="position:relative;padding-top:56.25%"><iframe style="position:absolute;inset:0;width:100%;height:100%;border:0" src="https://www.youtube.com/embed/${p.media.id}" allowfullscreen></iframe></div>`;
-        } else if(p.media?.type==='link' && p.media.url){
-          html += `<p><a href="${p.media.url}" target="_blank" rel="noopener">לצפייה במקור</a></p>`;
+        const lat=+p.lat, lng=+p.lng; if(isNaN(lat)||isNaN(lng)) return;
+        const side=(p.side||'neutral').toLowerCase();
+        const m=L.marker([lat,lng],{icon:iconBySide(side)});
+        let html=`<div><h4>${p.title||'עדכון'}</h4>`;
+        if(p.date) html+=`<div class="small">${new Date(p.date).toLocaleDateString('he-IL')}</div>`;
+        if(p.summary) html+=`<p>${p.summary}</p>`;
+        if(p.media?.type==='youtube'&&p.media.id){
+          html+=`<div style="position:relative;padding-top:56.25%"><iframe style="position:absolute;inset:0;width:100%;height:100%;border:0" src="https://www.youtube.com/embed/${p.media.id}" allowfullscreen></iframe></div>`;
+        } else if(p.media?.type==='link'&&p.media.url){
+          html+=`<p><a href="${p.media.url}" target="_blank" rel="noopener">לצפייה במקור</a></p>`;
         }
-        html += `</div>`;
-        marker.bindPopup(html, {maxWidth:360});
-        cluster.addLayer(marker);
+        html+='</div>';
+        m.bindPopup(html,{maxWidth:360}); cluster.addLayer(m);
       });
     }
-  }catch(e){
-    console.error(e);
-  }
+  }catch(e){ console.error(e); }
 }
 
 async function loadAll(initial=false){
-  clearLayers();
-  statusEl.textContent = 'טוען נתונים…';
+  clearAll();
+  statusEl.textContent='טוען נתונים…';
   loadFrontlineFromKML();
   await loadAdvancesAndPoints();
-  lastEl.textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
-  if(!initial) statusEl.textContent = 'רענון הושלם';
+  lastEl.textContent='עודכן: '+new Date().toLocaleTimeString('he-IL');
+  if(!initial) statusEl.textContent='רענון הושלם';
 }
 
-document.getElementById('refresh').addEventListener('click', ()=>loadAll(false));
-document.getElementById('layer-frontline').addEventListener('change', ()=>loadAll(false));
-document.getElementById('layer-lines').addEventListener('change', ()=>loadAll(false));
-document.getElementById('layer-points').addEventListener('change', ()=>loadAll(false));
-
+document.getElementById('refresh').addEventListener('click',()=>loadAll(false));
+document.getElementById('layer-frontline').addEventListener('change',()=>loadAll(false));
+document.getElementById('layer-lines').addEventListener('change',()=>loadAll(false));
+document.getElementById('layer-points').addEventListener('change',()=>loadAll(false));
 loadAll(true);
 setInterval(()=>loadAll(false), REFRESH_MS);
 </script>
