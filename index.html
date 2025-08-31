@@ -2,288 +2,123 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <title>מפת עדכונים – קו חזית + קווי התקדמות</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>מפת עדכונים</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Leaflet -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.polylinedecorator/1.7.0/leaflet.polylineDecorator.min.js"></script>
-  <script src="https://unpkg.com/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
+  <!-- תוסף טעינת KML (שומר צבעים/סגנונות של My Maps) -->
+  <script src="https://unpkg.com/leaflet-kml@1.0.1/dist/leaflet-kml.min.js"></script>
 
   <style>
-    html,body{height:100%;margin:0}
-    #map{height:100vh;width:100vw}
-    #toolbar{
-      position:fixed;top:8px;right:8px;z-index:1000;background:#fff;border:1px solid #ddd;
-      border-radius:12px;padding:10px 12px;box-shadow:0 6px 18px rgba(0,0,0,.08);max-width:600px
+    html, body, #map { height: 100%; margin: 0; }
+    .panel {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(255,255,255,0.92); padding: 10px 12px; border-radius: 8px;
+      font-family: system-ui, Arial; font-size: 14px; line-height: 1.4;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
     }
-    .row{margin-top:.5rem}
-    .small{font-size:12px;color:#666}
-    .flex{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
-    .slider{width:140px}
-    .chip{width:22px;height:6px;border-radius:4px;display:inline-block;border:1px solid #0002;margin-inline:6px}
+    .panel h4 { margin: 0 0 6px; font-size: 14px; }
+    .panel label { user-select: none; }
   </style>
 </head>
 <body>
-<div id="toolbar">
-  <div class="flex">
-    <label><input type="checkbox" id="layer-frontline" checked> קו חזית</label>
-    <label><input type="checkbox" id="layer-lines"> קווי התקדמות</label>
-    <label><input type="checkbox" id="layer-points" checked> נקודות</label>
-    <span class="small">
-      <span class="chip" style="background:#000"></span> חזית
-      <span class="chip" style="background:#e53935"></span> רוסי
-      <span class="chip" style="background:#1e88e5"></span> אוקראיני
-      • דהוי=&gt;14 יום
-    </span>
-  </div>
-  <div class="row"><b>גלגל עכבר</b></div>
-  <div class="flex">
-    <label><input type="checkbox" id="wheel-enabled" checked> פעיל</label>
-    <label><input type="checkbox" id="wheel-invert"> הפוך כיוון</label>
-    <label>רגישות
-      <input id="wheel-sens" class="slider" type="range" min="0.5" max="2" step="0.25" value="1">
+  <div id="map"></div>
+
+  <div class="panel">
+    <h4>גלגל עכבר</h4>
+    <label><input id="wheel-enabled" type="checkbox" checked> פעיל</label><br>
+    <label><input id="wheel-invert" type="checkbox"> הפוך כיוון</label><br>
+    <label>רגישות:
+      <input id="wheel-sense" type="range" min="0.25" max="2.0" step="0.25" value="1">
+      <span id="wheel-val">1.00×</span>
     </label>
-    <span id="wheel-sens-label" class="small">×1.00</span>
   </div>
-  <div class="row">
-    <button id="refresh">רענון עכשיו</button>
-    <span id="status" class="small">ממתין לטעינה…</span><br>
-    <span id="last" class="small"></span>
-  </div>
-</div>
-<div id="map"></div>
 
-<script>
-const FADE_AFTER_DAYS = 14;
-const COLOR_RU = '#e53935';
-const COLOR_UA = '#1e88e5';
-const COLOR_FL = '#000';
-const REFRESH_MS = 120000;
+  <script>
+    // --- הגדרות בסיס ---
+    const INITIAL_CENTER = [48.9, 36.7];  // מרכז כללי
+    const INITIAL_ZOOM   = 7;
 
-const MYMAPS_KML = 'https://www.google.com/maps/d/kml?mid=1lscRK6ehG0l2V-XvJ16nsyblMsQ&forcekml=1';
+    // נתיב קובץ ה-KML שהעלית לריפו
+    const ADVANCES_KML_URL = 'advances.kml';
+    // (אופציונלי) אם יש לך KML נוסף של קו חזית, אפשר להטעין גם אותו כאן:
+    // const FRONTLINE_KML_URL = 'frontline.kml';
 
-const map = L.map('map', {
-  zoomControl:true, scrollWheelZoom:true,
-  wheelDebounceTime:40, wheelPxPerZoomLevel:80,
-  touchZoom:'center', zoomSnap:0.25, zoomDelta:0.25
-}).setView([48.9,31.4],6);
+    // --- יצירת המפה ---
+    const map = L.map('map', {
+      center: INITIAL_CENTER,
+      zoom: INITIAL_ZOOM,
+      scrollWheelZoom: true,        // גלגל פעיל כברירת מחדל
+      wheelDebounceTime: 20,        // הפחתת "רעד" בגלילה
+      wheelPxPerZoomLevel: 60       // רגישות בסיסית
+    });
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap'}).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+      maxZoom: 19
+    }).addTo(map);
 
-const panel = document.getElementById('toolbar');
-L.DomEvent.disableScrollPropagation(panel);
-panel.addEventListener('wheel', e=>e.stopPropagation(), {passive:false});
+    // --- בקרת גלגל עכבר ---
+    const enabledEl = document.getElementById('wheel-enabled');
+    const invertEl  = document.getElementById('wheel-invert');
+    const senseEl   = document.getElementById('wheel-sense');
+    const valEl     = document.getElementById('wheel-val');
 
-const boundsUA = L.latLngBounds([45.1,22],[52.6,40.3]);
-map.fitBounds(boundsUA);
+    enabledEl.addEventListener('change', () => {
+      map.scrollWheelZoom[enabledEl.checked ? 'enable' : 'disable']();
+    });
 
-const frontlineGroup = L.layerGroup().addTo(map);
-const linesGroup     = L.layerGroup().addTo(map);
-const arrowsGroup    = L.layerGroup().addTo(map);
-const cluster        = L.markerClusterGroup().addTo(map);
+    invertEl.addEventListener('change', () => {
+      const invert = invertEl.checked ? -1 : 1;
+      map.options.zoomDelta = 1 * invert;
+      map.options.zoomSnap  = 0; // זום רציף
+    });
 
-const iconUA = L.icon({iconUrl:'ua.png',iconSize:[28,20],iconAnchor:[14,10],popupAnchor:[0,-10]});
-const iconRU = L.icon({iconUrl:'ru.png',iconSize:[28,20],iconAnchor:[14,10],popupAnchor:[0,-10]});
-const iconNE = L.icon({iconUrl:'nu.png',iconSize:[24,24],iconAnchor:[12,12],popupAnchor:[0,-10]});
-const iconBySide = s => s==='ua'?iconUA:s==='ru'?iconRU:iconNE;
+    senseEl.addEventListener('input', () => {
+      const mult = parseFloat(senseEl.value);
+      map.options.wheelPxPerZoomLevel = 60 / mult; // גבוה יותר => זום "מהיר" יותר
+      valEl.textContent = mult.toFixed(2) + '×';
+    });
 
-// wheel options
-const wheelEnabled=document.getElementById('wheel-enabled');
-const wheelInvert =document.getElementById('wheel-invert');
-const wheelSens   =document.getElementById('wheel-sens');
-const wheelLabel  =document.getElementById('wheel-sens-label');
-let customWheelAttached=false;
-function customWheelHandler(e){
-  if(!wheelEnabled.checked) return;
-  e.preventDefault();
-  const dir=(wheelInvert.checked?-1:1)*Math.sign(e.deltaY);
-  const step=0.25*parseFloat(wheelSens.value);
-  map.setZoomAround(e, map.getZoom()-dir*step);
-}
-function applyWheel(){
-  if(!wheelEnabled.checked){
-    map.scrollWheelZoom.disable();
-    if(customWheelAttached){ map._container.removeEventListener('wheel',customWheelHandler,{passive:false}); customWheelAttached=false; }
-  }else if(wheelInvert.checked){
-    map.scrollWheelZoom.disable();
-    if(!customWheelAttached){ map._container.addEventListener('wheel',customWheelHandler,{passive:false}); customWheelAttached=true; }
-  }else{
-    if(customWheelAttached){ map._container.removeEventListener('wheel',customWheelHandler,{passive:false}); customWheelAttached=false; }
-    map.scrollWheelZoom.enable();
-  }
-  wheelLabel.textContent = '×'+parseFloat(wheelSens.value).toFixed(2);
-}
-wheelEnabled.addEventListener('change',applyWheel);
-wheelInvert .addEventListener('change',applyWheel);
-wheelSens   .addEventListener('input',()=>wheelLabel.textContent='×'+parseFloat(wheelSens.value).toFixed(2));
-applyWheel();
-
-function styleForLine(side,dateStr){
-  const color = side==='ua'?COLOR_UA:COLOR_RU;
-  let opacity=0.95;
-  if(dateStr){
-    const days=(Date.now()-new Date(dateStr))/86400000;
-    if(days>FADE_AFTER_DAYS) opacity=0.35;
-  }
-  return {color,weight:3,opacity};
-}
-const styleFront = {color:COLOR_FL,weight:3.5,opacity:0.9};
-
-function polyKm(latlngs){ let km=0; for(let i=1;i<latlngs.length;i++) km+=map.distance(latlngs[i-1],latlngs[i])/1000; return km; }
-function fracInBox(latlngs,box){ let n=0; latlngs.forEach(ll=>{ if(box.contains(ll)) n++; }); return n/latlngs.length; }
-
-// תיבת חזית מחמירה (דרום–מזרח)
-const FRONT_BOX = L.latLngBounds([46.0, 27.5],[51.2, 40.9]);
-const NAME_RE = /(front\s*line|line\s*of\s*contact|contact\s*line|Линия\s*фронта|Линия\s*соприкосновения|линия\s*фронта|линия\s*контакта|קו\s*חזית|קו\s*מגע)/i;
-
-const statusEl=document.getElementById('status');
-const lastEl=document.getElementById('last');
-const refreshBtn=document.getElementById('refresh');
-const chkFront = document.getElementById('layer-frontline');
-const chkLines = document.getElementById('layer-lines');
-const chkPts   = document.getElementById('layer-points');
-
-function clearAll(){
-  frontlineGroup.clearLayers();
-  linesGroup.clearLayers();
-  arrowsGroup.clearLayers();
-  cluster.clearLayers();
-}
-
-// ממזג את כל מקטעי החזית לפי קירבה בין קצוות
-function mergePolylines(polylines){
-  if(polylines.length===0) return null;
-  // הפוך את כל המקטעים לרשימות LatLng
-  let segs = polylines.map(pl=>pl.getLatLngs().slice());
-  // נתחיל מהארוך ביותר
-  segs.sort((a,b)=>polyKm(b)-polyKm(a));
-  let merged = segs.shift();
-
-  function dist(a,b){ return a.distanceTo(b); }
-
-  while(segs.length){
-    let bestI=-1, bestMode=null, bestD=1e12;
-    const h1 = merged[0], t1 = merged[merged.length-1];
-    for(let i=0;i<segs.length;i++){
-      const s = segs[i], h2=s[0], t2=s[s.length-1];
-      const d1 = dist(t1,h2), d2 = dist(t1,t2), d3 = dist(h1,h2), d4 = dist(h1,t2);
-      const d = Math.min(d1,d2,d3,d4);
-      if(d<bestD){ bestD=d; bestI=i; bestMode=(d===d1?'t1-h2':d===d2?'t1-t2':d===d3?'h1-h2':'h1-t2'); }
-    }
-    const s = segs.splice(bestI,1)[0];
-    if(bestMode==='t1-h2'){ merged = merged.concat(s); }
-    else if(bestMode==='t1-t2'){ merged = merged.concat(s.slice().reverse()); }
-    else if(bestMode==='h1-h2'){ merged = s.slice().reverse().concat(merged); }
-    else { merged = s.concat(merged); }
-  }
-  return L.polyline(merged, styleFront);
-}
-
-// === 1) טעינת חזית עם סינון ואיחוד ===
-function loadFrontlineFromKML(){
-  if(!chkFront.checked) return;
-
-  const MIN_KM   = 5;      // אורך מינימלי למקטע
-  const MIN_FRAC = 0.8;    // 80% לפחות בתוך תיבת החזית
-
-  omnivore.kml(MYMAPS_KML)
-    .on('ready', function(){
-      const gj = this.toGeoJSON();
-      const candidates = [];
-
-      gj.features.forEach(f=>{
-        if(!f.geometry) return;
-        const name = (f.properties && (f.properties.name||f.properties.Name||f.properties.title)) || '';
-        const nameHit = NAME_RE.test(String(name));
-        if(!nameHit) return;
-
-        const pushLine = (coords)=>{
-          if(!coords || coords.length<2) return;
-          const latlngs = coords.map(c=>L.latLng(c[1],c[0]));
-          const km = polyKm(latlngs);
-          const frac = fracInBox(latlngs, FRONT_BOX);
-          if(km>=MIN_KM && frac>=MIN_FRAC){
-            candidates.push(L.polyline(latlngs, styleFront));
-          }
-        };
-
-        if(f.geometry.type==='LineString'){ pushLine(f.geometry.coordinates); }
-        else if(f.geometry.type==='MultiLineString'){ f.geometry.coordinates.forEach(pushLine); }
-      });
-
-      frontlineGroup.clearLayers();
-      if(candidates.length){
-        const merged = mergePolylines(candidates);
-        if(merged) merged.addTo(frontlineGroup);
-        statusEl.textContent = `חזית: ${candidates.length} מקטעים (אוחדו לקו אחד)`;
-      }else{
-        statusEl.textContent = 'לא נמצאה שכבת חזית (שם/מיקום לא תאם).';
-      }
-    })
-    .on('error', ()=>{ statusEl.textContent='שגיאה בטעינת KML'; });
-}
-
-// === 2) קווי התקדמות/נקודות מה-JSON שלך ===
-async function loadAdvancesAndPoints(){
-  try{
-    const r = await fetch('updates.json?t='+Date.now(), {cache:'no-store'});
-    if(!r.ok) return;
-    const data = await r.json();
-
-    if(chkLines.checked && Array.isArray(data.advances)){
-      data.advances.forEach(seg=>{
-        if(!Array.isArray(seg.coords)||seg.coords.length<2) return;
-        const st = styleForLine((seg.side||'ru').toLowerCase(), seg.date);
-        const pl = L.polyline(seg.coords, st).addTo(linesGroup);
-        const deco = L.polylineDecorator(pl,{
-          patterns:[{offset:'10%',repeat:'20%',symbol:L.Symbol.arrowHead({pixelSize:10,polygon:false,pathOptions:{stroke:true,color:st.color,weight:2,opacity:st.opacity}})}]
+    // --- פונקציה נוחה לטעינת KML ושמירת סגנונות המקור ---
+    function addKml(url, options = {}) {
+      return fetch(url)
+        .then(r => {
+          if (!r.ok) throw new Error('KML not found: ' + url);
+          return r.text();
+        })
+        .then(txt => {
+          const kml = new DOMParser().parseFromString(txt, 'text/xml');
+          const layer = new L.KML(kml, options);
+          layer.addTo(map);
+          try { map.fitBounds(layer.getBounds(), { padding: [20,20] }); } catch(e){}
+          return layer;
+        })
+        .catch(err => {
+          console.warn(err.message);
+          return null;
         });
-        arrowsGroup.addLayer(deco);
-      });
     }
 
-    if(chkPts.checked && Array.isArray(data.points)){
-      data.points.forEach(p=>{
-        const lat=+p.lat, lng=+p.lng; if(isNaN(lat)||isNaN(lng)) return;
-        const side=(p.side||'neutral').toLowerCase();
-        const m=L.marker([lat,lng],{icon:iconBySide(side)});
-        let html=`<div><h4>${p.title||'עדכון'}</h4>`;
-        if(p.date) html+=`<div class="small">${new Date(p.date).toLocaleDateString('he-IL')}</div>`;
-        if(p.summary) html+=`<p>${p.summary}</p>`;
-        if(p.media?.type==='youtube'&&p.media.id){
-          html+=`<div style="position:relative;padding-top:56.25%"><iframe style="position:absolute;inset:0;width:100%;height:100%;border:0" src="https://www.youtube.com/embed/${p.media.id}" allowfullscreen></iframe></div>`;
-        } else if(p.media?.type==='link'&&p.media.url){
-          html+=`<p><a href="${p.media.url}" target="_blank" rel="noopener">לצפייה במקור</a></p>`;
-        }
-        html+='</div>';
-        m.bindPopup(html,{maxWidth:360}); cluster.addLayer(m);
-      });
-    }
-  }catch(e){ console.error(e); }
-}
+    // --- טעינת קווי ההתקדמות מה-KML של My Maps ---
+    // זה יביא את אותם קווים/צבעים שכבר יש במפה המקורית שלך.
+    addKml(ADVANCES_KML_URL);
 
-async function loadAll(initial=false){
-  frontlineGroup.clearLayers(); linesGroup.clearLayers(); arrowsGroup.clearLayers(); cluster.clearLayers();
-  document.getElementById('status').textContent='טוען נתונים…';
-  loadFrontlineFromKML();
-  await loadAdvancesAndPoints();
-  document.getElementById('last').textContent='עודכן: '+new Date().toLocaleTimeString('he-IL');
-  if(!initial) document.getElementById('status').textContent='רענון הושלם';
-}
+    // --- (אופציונלי) טעינת KML נוסף של קו החזית אם יש לך קובץ כזה ---
+    // addKml(FRONTLINE_KML_URL, { async: true });
 
-document.getElementById('refresh').addEventListener('click',()=>loadAll(false));
-document.getElementById('layer-frontline').addEventListener('change',()=>loadAll(false));
-document.getElementById('layer-lines').addEventListener('change',()=>loadAll(false));
-document.getElementById('layer-points').addEventListener('change',()=>loadAll(false));
-loadAll(true);
-setInterval(()=>loadAll(false), REFRESH_MS);
-</script>
+  </script>
 </body>
 </html>
 
