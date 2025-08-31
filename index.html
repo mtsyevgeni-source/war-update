@@ -169,6 +169,16 @@ function polylineKm(latlngs){
   return km;
 }
 
+/* בדיקה אם רוב הנקודות בתוך תיבת חזית */
+function fractionInBox(latlngs, box){
+  let inside = 0;
+  latlngs.forEach(ll => { if(box.contains(ll)) inside++; });
+  return inside / latlngs.length;
+}
+
+/* תיבת חזית ממוקדת (מכסה דונבאס, זפוריז׳ה, חרסון; מדלגת על צפ׳ אוקראינה) */
+const FRONT_BOX = L.latLngBounds([45.0, 28.0], [50.8, 40.8]);
+
 /* ===== טעינה ===== */
 const statusEl = document.getElementById('status');
 const lastEl   = document.getElementById('last');
@@ -185,26 +195,38 @@ function clearLayers(){
   cluster.clearLayers();
 }
 
-/* --- 1) קו חזית: להשאיר רק את 2–3 הקווים הארוכים ביותר --- */
+/* --- 1) קו חזית עם סינון לפי שם שכבה + מסכת מיקום --- */
 function loadFrontlineFromKML(){
   if(!layerFrontChk.checked) return;
 
-  const MIN_SEG_KM = 10;     // לאסוף גם מקטעים בינוניים
-  const KEEP_TOP   = 3;      // לשמור את שלושת הארוכים ביותר
+  const MIN_SEG_KM = 8;   // סף נמוך כדי לאסוף חלקים בינוניים שקשורים לחזית
+  const KEEP_TOP   = 3;   // נשמור את שלושת הארוכים ביותר אחרי הסינון
+
+  const NAME_RE = /(front|contact|line|frontline|контакт|линия|фронт|линия\s*фронта)/i;
 
   omnivore.kml(MYMAPS_KML)
     .on('ready', function(){
       const candidates = [];
-
       const gj = this.toGeoJSON();
+
       gj.features.forEach(f=>{
         if(!f.geometry) return;
+
+        const name = (f.properties && (f.properties.name || f.properties.Name || f.properties.title)) || '';
+        const isLikelyFront = NAME_RE.test(String(name));
 
         const pushLine = (coords) => {
           if(!coords || coords.length<2) return;
           const latlngs = coords.map(c=>L.latLng(c[1], c[0]));
           const km = polylineKm(latlngs);
-          if(km >= MIN_SEG_KM){
+
+          // תנאי סינון:
+          // (א) אם שם שכבה רומז על חזית – נכלול (אם יש אורך סביר)
+          // (ב) אחרת – נכלול רק אם רוב הנקודות בתיבת החזית AND האורך מעל סף
+          const frac = fractionInBox(latlngs, FRONT_BOX);
+          const passes = (isLikelyFront && km>=MIN_SEG_KM) || (frac>=0.7 && km>=MIN_SEG_KM);
+
+          if(passes){
             candidates.push({km, latlngs});
           }
         };
@@ -216,7 +238,6 @@ function loadFrontlineFromKML(){
         }
       });
 
-      // מיון מהארוך לקצר ושמירה של הארוכים ביותר
       candidates.sort((a,b)=>b.km - a.km);
       const kept = candidates.slice(0, KEEP_TOP);
 
@@ -224,7 +245,7 @@ function loadFrontlineFromKML(){
         L.polyline(c.latlngs, styleFrontLine()).addTo(frontlineGroup);
       });
 
-      statusEl.textContent = kept.length ? `קו חזית נטען (${kept.length} מקטעים ארוכים)` : 'לא זוהו מקטעי חזית ארוכים';
+      statusEl.textContent = kept.length ? `קו חזית סונן (${kept.length} מקטעים)` : 'לא זוהתה חזית בקובץ';
     })
     .on('error', ()=>{ statusEl.textContent = 'שגיאה בטעינת KML'; });
 }
@@ -302,4 +323,5 @@ setInterval(()=>loadAll(false), REFRESH_MS);
 </script>
 </body>
 </html>
+
 
