@@ -1,176 +1,160 @@
-<!doctype html>
-<html lang="he" dir="rtl">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>מפת עדכונים</title>
-
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <meta charset="UTF-8" />
+  <title>Ukraine War Updates</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-polylinedecorator@1.7.0/dist/leaflet.polylineDecorator.min.js"></script>
-  <script src="https://unpkg.com/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
-
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.css">
-  <script src="https://unpkg.com/leaflet-gesture-handling"></script>
-
   <style>
-    html, body, #map { height: 100%; margin: 0; }
-    .panel{position:fixed;top:10px;right:10px;z-index:1000;background:rgba(255,255,255,.95);
-      padding:10px 12px;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.12);
-      font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.5;max-width:340px}
-    .panel h3{margin:.2em 0 .4em;font-size:16px}
-    .panel label{display:block;margin:.25em 0}
-    .legend{margin-top:.4em;opacity:.9}
-    .legend .chip{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-left:6px;border-radius:2px}
-    .chip-front{background:#000}
-    .chip-adv{background:#000;opacity:.6}
+    #map {
+      width: 100%;
+      height: 100vh;
+      cursor: grab;
+    }
+    .leaflet-dragging #map {
+      cursor: grabbing;
+    }
   </style>
 </head>
 <body>
-<div id="map"></div>
+  <div id="map"></div>
 
-<div class="panel">
-  <h3>שכבות</h3>
-  <label><input type="checkbox" id="cb-front" checked> קו חזית</label>
-  <label><input type="checkbox" id="cb-adv" checked> קווי התקדמות</label>
-  <label style="margin-right:18px"><input type="checkbox" id="cb-arrows"> הראה חיצים על הקווים</label>
-  <label><input type="checkbox" id="cb-points"> נקודות</label>
-  <hr>
-  <h3>גלגל עכבר</h3>
-  <label><input type="checkbox" id="cb-wheel"> פעיל</label>
-  <label><input type="checkbox" id="cb-invert"> הפוך כיוון גלילה</label>
-  <div class="legend">
-    <div><span class="chip chip-front"></span>קו חזית (שחור עבה)</div>
-    <div><span class="chip chip-adv"></span>קווי התקדמות (שחור דק, שקיפות)</div>
-  </div>
-</div>
-
-<script>
-  // ===== מפה =====
-  const map = L.map('map', {
-    center: [48.5, 35.5],
-    zoom: 7,
-    gestureHandling: true,
-    scrollWheelZoom: false,
-    zoomControl: true
-  });
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18, attribution: '&copy; OpenStreetMap'
-  }).addTo(map);
-
-  // שכבות
-  const frontLayer    = L.layerGroup();
-  const advancesLayer = L.layerGroup();
-  const arrowsLayer   = L.layerGroup();
-  const pointsLayer   = L.layerGroup();
-
-  // ===== קו חזית מתוך advances.kml =====
-  const frontTarget = L.geoJSON(null, {
-    filter: f => /front\s*line/i.test((f?.properties?.name || f?.properties?.Title || '')),
-    style: { color:'#000', weight:5, opacity:0.98, smoothFactor:1 }
-  });
-  omnivore.kml('advances.kml', null, frontTarget)
-    .on('ready', () => { frontTarget.addTo(frontLayer); frontLayer.addTo(map); })
-    .on('error', e => console.error('KML load error:', e.error));
-
-  // ===== קווי התקדמות (advances2.json) – Canvas + דקים ושקופים =====
-  const canvasRenderer = L.canvas({ padding: 0.5 });
-  let advancesPolylines = [];
-
-  fetch('advances2.json').then(r=>r.json()).then(geo=>{
-    const layer = L.geoJSON(geo, {
-      renderer: canvasRenderer,
-      style: { color:'#000', weight:1, opacity:0.35, smoothFactor:1.2 }
+  <script>
+    // אתחול המפה
+    const map = L.map("map", {
+      center: [48.4, 36.6],
+      zoom: 7,
+      zoomControl: true,
+      scrollWheelZoom: true,
+      wheelDebounceTime: 20,
+      wheelPxPerZoomLevel: 120,
+      inertia: true,
     });
-    layer.addTo(advancesLayer);
 
-    layer.eachLayer(l => { if (l instanceof L.Polyline) advancesPolylines.push(l); });
-    updateVisibility(); // כדי ליישר מצב לפי הזום הראשוני
-  }).catch(err=>console.error('advances2.json load error:',err));
+    // שכבת בסיס
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(map);
 
-  // ===== נקודות (advances1.json) – כבוי כברירת מחדל ומזום 9+ =====
-  fetch('advances1.json').then(r=>r.json()).then(geo=>{
-    const layer = L.geoJSON(geo, {
-      pointToLayer: (f, latlng) => L.circleMarker(latlng, {
-        radius: 3, color:'#2b6cb0', fillColor:'#2b6cb0', fillOpacity:.85, weight:.5
-      }).bindTooltip(f?.properties?.name || '', {direction:'top', offset:[0,-2]})
+    // יצירת Panes (למנוע השתלטות שכבות על העכבר)
+    map.createPane("frontPane");
+    map.createPane("advancesPane");
+    map.createPane("pointsPane");
+    map.createPane("arrowsPane");
+
+    map.getPane("frontPane").style.zIndex = 410;
+    map.getPane("advancesPane").style.zIndex = 405;
+    map.getPane("pointsPane").style.zIndex = 415;
+    map.getPane("arrowsPane").style.zIndex = 420;
+
+    map.getPane("frontPane").style.pointerEvents = "none";
+    map.getPane("advancesPane").style.pointerEvents = "none";
+    map.getPane("pointsPane").style.pointerEvents = "none";
+    map.getPane("arrowsPane").style.pointerEvents = "none";
+
+    // שכבת קו חזית (GeoJSON)
+    const frontLayer = L.geoJSON(null, {
+      style: {
+        color: "#000",
+        weight: 4,
+        opacity: 0.95,
+        smoothFactor: 1,
+      },
+      pane: "frontPane",
+      interactive: false,
+      bubblingMouseEvents: false,
     });
-    layer.addTo(pointsLayer);
-    updateVisibility();
-  }).catch(err=>console.error('advances1.json load error:',err));
 
-  // ===== חיצים =====
-  function rebuildArrows(enabled){
-    arrowsLayer.clearLayers();
-    if (!enabled || !map.hasLayer(advancesLayer) || map.getZoom() < 10) return;
-    advancesPolylines.forEach(line=>{
-      L.polylineDecorator(line, {
-        patterns: [{ offset:'6%', repeat: 180, symbol: L.Symbol.arrowHead({
-          pixelSize: 8, pathOptions:{ color:'#000', weight:1, fillOpacity:.9 }
-        })}]
-      }).addTo(arrowsLayer);
+    fetch("advances2.json")
+      .then((res) => res.json())
+      .then((geo) => {
+        frontLayer.addData(geo).addTo(map);
+      });
+
+    // שכבת קווי התקדמות
+    const advancesLayer = L.geoJSON(null, {
+      style: {
+        color: "#000",
+        weight: 1,
+        opacity: 0.35,
+        smoothFactor: 1.2,
+      },
+      pane: "advancesPane",
+      interactive: false,
+      bubblingMouseEvents: false,
     });
-    arrowsLayer.addTo(map);
-  }
 
-  // ===== שליטה בשכבות =====
-  const $ = id => document.getElementById(id);
+    fetch("advances2.json")
+      .then((res) => res.json())
+      .then((geo) => {
+        advancesLayer.addData(geo);
+      });
 
-  $('cb-front').addEventListener('change', e=>{
-    if (e.target.checked) frontLayer.addTo(map); else map.removeLayer(frontLayer);
-  });
+    // שכבת נקודות (advances1.json)
+    const pointsLayer = L.geoJSON(null, {
+      pointToLayer: (f, latlng) =>
+        L.circleMarker(latlng, {
+          radius: 3,
+          color: "#2b6cb0",
+          fillColor: "#2b6cb0",
+          fillOpacity: 0.85,
+          weight: 0.5,
+        }),
+      pane: "pointsPane",
+      interactive: false,
+      bubblingMouseEvents: false,
+    });
 
-  $('cb-adv').addEventListener('change', e=>{
-    if (e.target.checked) advancesLayer.addTo(map); else { map.removeLayer(advancesLayer); map.removeLayer(arrowsLayer); $('cb-arrows').checked=false; }
-    updateVisibility();
-  });
+    fetch("advances1.json")
+      .then((res) => res.json())
+      .then((geo) => {
+        pointsLayer.addData(geo);
+      });
 
-  $('cb-arrows').addEventListener('change', e=> rebuildArrows(e.target.checked));
+    // שכבת עדכונים (updates.json עם דגלים)
+    const icons = {
+      ru: L.icon({ iconUrl: "ru.png", iconSize: [24, 18] }),
+      ua: L.icon({ iconUrl: "ua.png", iconSize: [24, 18] }),
+      nu: L.icon({ iconUrl: "nu.png", iconSize: [24, 18] }),
+    };
 
-  $('cb-points').addEventListener('change', e=>{
-    if (e.target.checked) pointsLayer.addTo(map); else map.removeLayer(pointsLayer);
-    updateVisibility();
-  });
+    const updatesLayer = L.layerGroup();
 
-  // גלגל עכבר
-  $('cb-wheel').addEventListener('change', e=>{
-    if (e.target.checked) map.scrollWheelZoom.enable(); else map.scrollWheelZoom.disable();
-  });
+    fetch("updates.json")
+      .then((res) => res.json())
+      .then((data) => {
+        data.forEach((item) => {
+          const marker = L.marker([item.lat, item.lng], {
+            icon: icons[item.side] || icons.nu,
+          }).bindPopup(
+            `<b>${item.title}</b><br>${item.date}<br>${item.summary}`
+          );
+          updatesLayer.addLayer(marker);
+        });
+      });
 
-  let inverted=false;
-  $('cb-invert').addEventListener('change', e=> inverted = e.target.checked);
-  map.getContainer().addEventListener('wheel', ev=>{
-    if (!map.scrollWheelZoom.enabled() || !inverted) return;
-    ev.preventDefault();
-    const d = ev.deltaY || ev.wheelDelta;
-    if (d > 0) map.zoomIn(1,{animate:true}); else map.zoomOut(1,{animate:true});
-  }, {passive:false});
+    // בקרת שכבות
+    const overlays = {
+      "קו חזית": frontLayer,
+      "קווי התקדמות": advancesLayer,
+      נקודות: pointsLayer,
+      "הצגת חיצים על הקווים": null, // נשאיר אופציה לחיצים בעתיד
+      "עדכונים": updatesLayer,
+    };
 
-  // ===== הצגה לפי זום (פחות צפוף) =====
-  function updateVisibility(){
-    const z = map.getZoom();
+    L.control.layers(null, overlays, { collapsed: false }).addTo(map);
 
-    // קווי התקדמות: מזום 8+
-    if (z >= 8 && $('cb-adv').checked) {
-      if (!map.hasLayer(advancesLayer)) advancesLayer.addTo(map);
-    } else {
-      if (map.hasLayer(advancesLayer)) map.removeLayer(advancesLayer);
-      if (map.hasLayer(arrowsLayer)) map.removeLayer(arrowsLayer);
-      $('cb-arrows').checked = false;
-    }
-
-    // חיצים: מזום 10+
-    rebuildArrows($('cb-arrows').checked);
-
-    // נקודות: מזום 9+
-    if (z >= 9 && $('cb-points').checked) {
-      if (!map.hasLayer(pointsLayer)) pointsLayer.addTo(map);
-    } else {
-      if (map.hasLayer(pointsLayer)) map.removeLayer(pointsLayer);
-    }
-  }
-  map.on('zoomend', updateVisibility);
-</script>
+    // כברירת מחדל להציג את כל השכבות
+    frontLayer.addTo(map);
+    advancesLayer.addTo(map);
+    pointsLayer.addTo(map);
+    updatesLayer.addTo(map);
+  </script>
 </body>
 </html>
