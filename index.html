@@ -1,274 +1,213 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
+  <title>מפת עדכונים – קו חזית והתקדמויות</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>מפת עדכונים – קו חזית וקווי התקדמות</title>
 
+  <!-- Leaflet -->
   <link rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZYo2w2Rj9u2j0Xk="
         crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          integrity="sha256-o9N1j7kG9G8zHn2fC9nPw3Y6f9G3C1fS2Q7lGStFv4M="
           crossorigin=""></script>
-  <script src="https://unpkg.com/@mapbox/leaflet-omnivore/leaflet-omnivore.min.js"></script>
+
+  <!-- חצים על קווים -->
+  <script src="https://unpkg.com/leaflet-polylinedecorator@1.7.0/dist/leaflet.polylineDecorator.min.js"></script>
 
   <style>
-    html, body { height:100%; margin:0; }
-    #map { height:100%; width:100%; }
-    .panel{
-      position:fixed; top:12px; right:12px; z-index:1000;
-      background:#ffffffea; border:1px solid #ddd; border-radius:10px;
-      padding:10px 12px; font-family:system-ui,Arial,sans-serif; font-size:14px;
-      box-shadow:0 6px 16px rgba(0,0,0,.12); min-width:270px;
-    }
-    .panel h4{ margin:0 0 6px; font-size:15px; }
-    .sep{ height:1px; background:#eee; margin:8px 0; }
-    .muted{ color:#666; font-size:12px; }
-    .legend{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
-    .chip{ display:inline-flex; align-items:center; gap:6px; }
-    .dot{ width:18px; height:4px; border-radius:2px; display:inline-block; }
-    .dot.fl{ background:#000; }  .dot.ru{ background:#e43b3b; }  .dot.ua{ background:#2b6de5; }
-    .slider-row{ display:flex; align-items:center; gap:8px; }
-    .slider-row input[type=range]{ width:140px; }
+    html, body, #map { height:100%; margin:0; }
+    .panel{position:absolute;top:12px;right:12px;background:#fff;opacity:.98;padding:12px 14px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.15);font:14px/1.35 system-ui,Arial}
+    .panel h3{margin:0 0 8px;font-size:16px}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0}
+    .legend{margin-top:8px;padding-top:8px;border-top:1px solid #e8e8e8;font-size:13px}
+    .swatch{display:inline-block;width:14px;height:4px;margin-inline-start:6px;vertical-align:middle}
+    .front{background:#000;height:6px}
+    .ru{background:#d33}
+    .ua{background:#1f6ef5}
+    .unk{background:#666}
+    .hint{color:#666;font-size:12px}
   </style>
 </head>
 <body>
   <div id="map"></div>
 
   <div class="panel">
-    <h4>שכבות</h4>
-    <div>
-      <label><input type="checkbox" id="cbFront" checked> קו חזית</label><br>
-      <label><input type="checkbox" id="cbRU" checked> התקדמות רוסית</label><br>
-      <label><input type="checkbox" id="cbUA" checked> התקדמות אוקראינית</label>
-    </div>
+    <h3>שכבות</h3>
+    <div class="row"><label><input type="checkbox" id="toggle-front" checked> קו חזית</label></div>
+    <div class="row"><label><input type="checkbox" id="toggle-ru" checked> התקדמות רוסית</label></div>
+    <div class="row"><label><input type="checkbox" id="toggle-ua" checked> התקדמות אוקראינית</label></div>
+    <div class="row"><label><input type="checkbox" id="toggle-unk" checked> התקדמות (לא מסווג)</label></div>
 
-    <div class="sep"></div>
-
-    <div class="slider-row">
-      <label for="wheel">גלגל עכבר</label>
-      <input id="wheel" type="range" min="0.5" max="2.0" step="0.05" value="1.00">
+    <h3 style="margin-top:10px">גלגל עכבר</h3>
+    <div class="row">
+      <label for="wheelStep">עוצמה</label>
+      <input type="range" id="wheelStep" min="0.2" max="2" step="0.05" value="1">
       <span id="wheelVal">1.00×</span>
     </div>
-    <label><input type="checkbox" id="invertZoom"> הפוך כיוון גלילה</label>
-
-    <div class="sep"></div>
-    <div class="muted" id="status">טוען advances.kml…</div>
+    <div class="row"><label><input type="checkbox" id="invertWheel"> הפוך כיוון גלגל</label></div>
+    <div class="hint">אם הזום “רץ” מהר מדי — הורד לעוצמה 0.6–0.8.</div>
 
     <div class="legend">
-      <span class="chip"><span class="dot fl"></span> חזית</span>
-      <span class="chip"><span class="dot ru"></span> רוסי</span>
-      <span class="chip"><span class="dot ua"></span> אוקראיני</span>
+      <div><span class="swatch front"></span> קו חזית</div>
+      <div><span class="swatch ru"></span> התקדמות רוסית</div>
+      <div><span class="swatch ua"></span> התקדמות אוקראינית</div>
+      <div><span class="swatch unk"></span> התקדמות (לא מסווג)</div>
+      <div class="hint">קווים בני 14+ יום מוצגים דהויים (אם יש תאריך ב-properties).</div>
+      <div id="lastUpdated" class="hint" style="margin-top:6px"></div>
     </div>
   </div>
 
   <script>
-    const KML_URL = "advances.kml";
-    const COLORS = { frontline:"#000000", ru:"#e43b3b", ua:"#2b6de5" };
-    const WEIGHT = 3, OPACITY = 0.9;
+    // ---- קבצים כפי שיש בריפו שלך ----
+    const FILES = ['advances1.json', 'advances2.json']; // נטען את שניהם וממיינים בזמן ריצה
+    const FADE_AFTER_DAYS = 14;
 
-    const map = L.map('map', {
-      center:[48.7, 36.8], zoom:7,
-      scrollWheelZoom:true, wheelPxPerZoomLevel:60,
-      zoomSnap:0.25, zoomDelta:0.25
-    });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom:19, attribution:'Leaflet | © OpenStreetMap'
-    }).addTo(map);
+    const STYLE = {
+      front:  { color:'#000',    weight:4, opacity:1.0 },
+      ru:     { color:'#d33',    weight:3, opacity:1.0 },
+      ua:     { color:'#1f6ef5', weight:3, opacity:1.0 },
+      unk:    { color:'#666',    weight:3, opacity:0.9 },
+      fadedOpacity: 0.30
+    };
 
-    // שליטה בגלגל
-    const wheelSlider = document.getElementById('wheel');
-    const wheelVal = document.getElementById('wheelVal');
-    wheelSlider.addEventListener('input', ()=>{
-      const v = parseFloat(wheelSlider.value);
-      wheelVal.textContent = v.toFixed(2)+"×";
-      map.options.wheelPxPerZoomLevel = 60 / v;
+    const map = L.map('map', { center:[48.7,35.5], zoom:6, scrollWheelZoom:false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { attribution:'&copy; OpenStreetMap contributors' }).addTo(map);
+
+    function showUpdated(){
+      document.getElementById('lastUpdated').textContent =
+        'עודכן: ' + new Date().toLocaleString('he-IL');
+    }
+    showUpdated();
+
+    // שליטת גלגל
+    let wheelStep = 1.0, invertWheel = false;
+    const wheelValEl = document.getElementById('wheelVal');
+    document.getElementById('wheelStep').addEventListener('input', e=>{
+      wheelStep = parseFloat(e.target.value);
+      wheelValEl.textContent = wheelStep.toFixed(2)+'×';
     });
-    const invertBox = document.getElementById('invertZoom');
-    map.on('wheel',(e)=>{
-      if(!invertBox.checked) return;
-      const c = map.getCenter();
-      if(e.originalEvent.deltaY < 0) map.zoomOut(undefined,{animate:false});
-      else map.zoomIn(undefined,{animate:false});
-      map.panTo(c,{animate:false});
-      e.originalEvent.preventDefault();
-    }, {passive:false});
+    document.getElementById('invertWheel').addEventListener('change', e=>{
+      invertWheel = e.target.checked;
+    });
+    map.getContainer().addEventListener('wheel', (ev)=>{
+      ev.preventDefault();
+      const dir = (ev.deltaY>0?-1:1) * (invertWheel?-1:1);
+      const next = map.getZoom() + dir*(0.5*wheelStep);
+      map.setZoomAround(ev, next);
+    }, { passive:false });
 
     // שכבות
-    const frontlineLayer = L.layerGroup().addTo(map);
+    const frontLayer = L.layerGroup().addTo(map);
     const ruLayer = L.layerGroup().addTo(map);
     const uaLayer = L.layerGroup().addTo(map);
+    const unkLayer = L.layerGroup().addTo(map);
 
-    document.getElementById('cbFront').addEventListener('change', e=>{
-      e.target.checked ? frontlineLayer.addTo(map) : map.removeLayer(frontlineLayer);
-    });
-    document.getElementById('cbRU').addEventListener('change', e=>{
-      e.target.checked ? ruLayer.addTo(map) : map.removeLayer(ruLayer);
-    });
-    document.getElementById('cbUA').addEventListener('change', e=>{
-      e.target.checked ? uaLayer.addTo(map) : map.removeLayer(uaLayer);
-    });
+    document.getElementById('toggle-front').onchange = e => e.target.checked ? frontLayer.addTo(map) : map.removeLayer(frontLayer);
+    document.getElementById('toggle-ru').onchange    = e => e.target.checked ? ruLayer.addTo(map)   : map.removeLayer(ruLayer);
+    document.getElementById('toggle-ua').onchange    = e => e.target.checked ? uaLayer.addTo(map)   : map.removeLayer(uaLayer);
+    document.getElementById('toggle-unk').onchange   = e => e.target.checked ? unkLayer.addTo(map)  : map.removeLayer(unkLayer);
 
-    const statusEl = document.getElementById('status');
-
-    // === עזר: צבע aabbggrr של KML -> #rrggbb
-    function kmlColorToHexRGB(kml){
-      if(!kml || kml.length !== 8) return null;
-      const bb = kml.substring(2,4),
-            gg = kml.substring(4,6),
-            rr = kml.substring(6,8);
-      return `#${rr}${gg}${bb}`.toLowerCase();
+    // ----- זיהוי אוטומטי -----
+    function isFrontByName(n){
+      if(!n) return false;
+      n = String(n).toLowerCase();
+      return n.includes('front line') || n.includes('frontline') || n.includes('קו חזית') || n.includes('front ');
     }
-
-    // מילות מפתח לזיהוי לפי שם התיקייה
-    const RU_KEYS = ['russian','russia','rus','ru','רוס','אדום'];
-    const UA_KEYS = ['ukrainian','ukraine','ukr','ua','אוק','כחול'];
-    function guessByFolderName(name){
-      const s = (name||'').toLowerCase();
-      if(RU_KEYS.some(k=>s.includes(k))) return 'ru';
-      if(UA_KEYS.some(k=>s.includes(k))) return 'ua';
-      return null;
+    function hexToRGB(hex){
+      if(!hex) return null;
+      const m = String(hex).trim().match(/^#?([0-9a-f]{6})$/i);
+      if(!m) return null;
+      const v = parseInt(m[1],16);
+      return { r:(v>>16)&255, g:(v>>8)&255, b:v&255 };
     }
-
-    // בניית מיפוי styleUrl→צבע + מיפוי Placemark→סיווג ע"פ שושלת תיקיות
-    async function parseKmlMeta(){
-      const res = await fetch(KML_URL, {cache:'no-store'});
-      const txt = await res.text();
-      const xml = new DOMParser().parseFromString(txt, "text/xml");
-
-      const styleColor = {};
-      xml.querySelectorAll('Style').forEach(st=>{
-        const id = st.getAttribute('id');
-        const c = st.querySelector('LineStyle > color')?.textContent?.trim();
-        if(id && c){ const hex = kmlColorToHexRGB(c); if(hex) styleColor['#'+id] = hex; }
-      });
-      xml.querySelectorAll('StyleMap').forEach(sm=>{
-        const id = sm.getAttribute('id');
-        let normalUrl = null;
-        sm.querySelectorAll('Pair').forEach(p=>{
-          const key = p.querySelector('key')?.textContent?.trim();
-          const url = p.querySelector('styleUrl')?.textContent?.trim();
-          if(key==='normal' && url) normalUrl = url;
-        });
-        if(id && normalUrl && styleColor[normalUrl]){
-          styleColor['#'+id] = styleColor[normalUrl];
-        }
-      });
-
-      // לכל Placemark נאתר את שרשרת הורים (Folders) ונגזור סיווג לפי שם
-      const folderStack = [];
-      const placemarkClass = new Map();
-
-      function walk(node){
-        if(node.nodeName==='Folder'){
-          const nm = node.querySelector(':scope > name')?.textContent || '';
-          folderStack.push(nm);
-          node.childNodes.forEach(walk);
-          folderStack.pop();
-          return;
-        }
-        if(node.nodeName==='Placemark'){
-          const id = node.querySelector(':scope > name')?.textContent || '';
-          // חיפוש styleUrl ישיר
-          const styleUrl = node.querySelector(':scope > styleUrl')?.textContent?.trim() || '';
-          // סיווג ע"י שם תיקייה
-          let cls = null;
-          for(let i=folderStack.length-1;i>=0;i--){
-            const g = guessByFolderName(folderStack[i]);
-            if(g){ cls = g; break; }
-          }
-          // נשמור לפי מזהה פנימי (ניעזר בטקסט ה-XML של ה-placemark כדי לזהות אח"כ)
-          placemarkClass.set(node, {cls, styleUrl});
-          return;
-        }
-        node.childNodes.forEach(walk);
-      }
-      walk(xml.documentElement);
-
-      return {styleColor, placemarkClass, xml};
+    function isRedish(hex){
+      const c = hexToRGB(hex); if(!c) return false;
+      return c.r > 160 && c.r > c.g + 30 && c.r > c.b + 30;
     }
-
-    function classify(hex, folderCls){
-      // קודם לפי שם תיקייה, אחרת לפי צבע
-      if(folderCls) return folderCls;
-      const c = (hex||'').toLowerCase();
-      if(c==='#ff0000' || c==='#e43b3b') return 'ru';
-      if(c==='#0000ff' || c==='#2b6de5') return 'ua';
-      if(c==='#000000' || c==='#333333' || c==='#1f1f1f') return 'frontline';
-      return 'frontline';
+    function isBlueish(hex){
+      const c = hexToRGB(hex); if(!c) return false;
+      return c.b > 160 && c.b > c.r + 20 && c.b > c.g + 20;
     }
-
-    (async function(){
+    function opacityByDate(f){
       try{
-        const meta = await parseKmlMeta();
+        const p=f.properties||{};
+        const cand=p.date||p.Date||p.timestamp||p.when||p.start||p.Start||p.end;
+        if(!cand) return 1.0;
+        const d=new Date(cand); if(isNaN(d)) return 1.0;
+        const days=(Date.now()-d.getTime())/86400000;
+        return days>=FADE_AFTER_DAYS?STYLE.fadedOpacity:1.0;
+      }catch{return 1.0}
+    }
+    function classifyFeature(f){
+      const p=f.properties||{};
+      const name=(p.name||p.Name||p.title||'')+' '+(p.description||'');
+      const stroke = p.stroke || p.strokeColor || p.color || p['stroke-color'] || p['line-color'];
 
-        // נטען שוב דרך omnivore כדי לקבל GeoJSON
-        omnivore.kml(KML_URL)
-          .on('ready', function(){
-            const gj = this.toGeoJSON();
-            let bounds = null;
+      if (isFrontByName(name) || (stroke && (stroke.toLowerCase()==='#000000' || stroke.toLowerCase()==='#000')))
+        return 'front';
 
-            (gj.features || []).forEach(f=>{
-              const g = f.geometry;
-              if(!g) return;
-              if(g.type==='Point' || g.type==='MultiPoint') return; // בלי נקודות
+      const low = name.toLowerCase();
+      if (isRedish(stroke) || low.includes('rus') || low.includes('russian') || low.includes('рос') || low.includes('רוס'))
+        return 'ru';
 
-              // נאתר את Placemark המקורי כדי לדעת styleUrl ושם תיקייה
-              // התאמה גסה: לפי bbox/coords ראשונים (מספיק טוב כאן)
-              const coordsKey = JSON.stringify(g.coordinates[0]?.slice(0,4) || g.coordinates.slice(0,2));
-              let styleUrl='', folderCls=null;
+      if (isBlueish(stroke) || low.includes('ukr') || low.includes('ukrain') || low.includes('укр') || low.includes('אוקרא'))
+        return 'ua';
 
-              // מעבר על כל ה-placemarks מן ה-XML ומציאת התאמה מקורבת
-              // (הצמדה מושלמת דורשת יותר עבודה; לגבינו זה עובד מספיק)
-              meta.placemarkClass.forEach((val, node)=>{
-                const ls = node.querySelector('LineString coordinates, MultiGeometry LineString coordinates');
-                if(!ls) return;
-                const arr = ls.textContent.trim().split(/\s+/)
-                             .map(x=>x.split(',').map(Number))
-                             .slice(0,4);
-                const k = JSON.stringify(arr);
-                if(k===coordsKey){ styleUrl = val.styleUrl; folderCls = val.cls; }
-              });
+      return 'unk';
+    }
 
-              const hex = meta.styleColor[styleUrl] || "#000000";
-              const cls = classify(hex, folderCls);
-
-              let target = frontlineLayer, color = COLORS.frontline;
-              if(cls==='ru'){ target = ruLayer; color = COLORS.ru; }
-              if(cls==='ua'){ target = uaLayer; color = COLORS.ua; }
-
-              const drawLine = (coords) =>
-                L.polyline(coords.map(c=>[c[1], c[0]]),
-                           {color, weight:WEIGHT, opacity:OPACITY}).addTo(target);
-
-              if(g.type==="LineString"){
-                drawLine(g.coordinates);
-              }else if(g.type==="MultiLineString"){
-                g.coordinates.forEach(drawLine);
-              }
-
-              try{
-                const tmp = L.geoJSON(f);
-                bounds = bounds ? bounds.extend(tmp.getBounds()) : tmp.getBounds();
-              }catch{}
-            });
-
-            if(bounds) map.fitBounds(bounds.pad(0.05));
-            statusEl.textContent = "עודכן: " + new Date().toLocaleString();
-          })
-          .on('error', e=>{
-            statusEl.textContent = "שגיאה בטעינת KML";
-            console.error(e);
-          });
-
-      }catch(err){
-        statusEl.textContent = "שגיאה בקריאת KML: " + err;
-        console.error(err);
+    function addWithArrows(line, color, opacity, group){
+      line.setStyle({ color, weight: line.options.weight||3, opacity });
+      line.addTo(group);
+      if (line instanceof L.Polyline && !(line instanceof L.Polygon)) {
+        L.polylineDecorator(line, {
+          patterns: [{
+            offset: 25, repeat: 120,
+            symbol: L.Symbol.arrowHead({ pixelSize: 10, pathOptions:{ color, weight:2, opacity } })
+          }]
+        }).addTo(group);
       }
-    })();
+    }
+
+    function handleGeoJSON(geo){
+      const fitBounds = L.latLngBounds();
+      L.geoJSON(geo, {
+        onEachFeature: (f, lyr) => {
+          const cls = classifyFeature(f);
+          const op  = opacityByDate(f);
+          if (cls === 'front') {
+            lyr.setStyle({ color: STYLE.front.color, weight: STYLE.front.weight, opacity: op });
+            lyr.addTo(frontLayer);
+          } else if (cls === 'ru') {
+            addWithArrows(lyr, STYLE.ru.color, op, ruLayer);
+          } else if (cls === 'ua') {
+            addWithArrows(lyr, STYLE.ua.color, op, uaLayer);
+          } else {
+            addWithArrows(lyr, STYLE.unk.color, op, unkLayer);
+          }
+          if (lyr.getBounds) {
+            const b=lyr.getBounds(); if (b.isValid()) fitBounds.extend(b);
+          }
+        },
+        style: { weight:3 }
+      });
+      if (fitBounds.isValid()) map.fitBounds(fitBounds.pad(0.05));
+    }
+
+    // טוענים את שני הקבצים וממיינים
+    Promise.allSettled(FILES.map(u=>fetch(u).then(r=>r.ok?r.json():Promise.reject(u+' missing'))))
+      .then(results=>{
+        let any=false;
+        results.forEach(res=>{
+          if(res.status==='fulfilled'){ handleGeoJSON(res.value); any=true; }
+          else console.warn(res.reason);
+        });
+        if(!any) console.warn('לא נטען אף advances*.json');
+      });
   </script>
 </body>
 </html>
-
