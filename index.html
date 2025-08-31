@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <title>מפת עדכונים – קווי התקדמות + קו חזית</title>
+  <title>מפת עדכונים – קו חזית נקי + קווי התקדמות</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
 
   <!-- Leaflet -->
@@ -14,17 +14,16 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
-  <!-- PolylineDecorator (לחצים על קווי התקדמות) -->
+  <!-- PolylineDecorator (לחצים על קווי התקדמות שלנו בלבד) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.polylinedecorator/1.7.0/leaflet.polylineDecorator.min.js"></script>
 
-  <!-- Omnivore – טעינת KML/GeoJSON בדפדפן -->
+  <!-- Omnivore – טעינת KML/GeoJSON -->
   <script src="https://unpkg.com/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
 
   <style>
     html,body{height:100%;margin:0}
     body{overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     #map{height:100vh;width:100vw}
-
     #toolbar{
       position:fixed;top:8px;right:8px;z-index:1000;
       background:#fff;border:1px solid #ddd;border-radius:12px;padding:10px 12px;
@@ -79,7 +78,7 @@ const COLOR_UA = '#1e88e5';
 const COLOR_FL = '#000000';
 const REFRESH_MS = 120000;
 
-// קישור KML של Google My Maps (מה־mid ששלחת):
+/* קישור KML של Google My Maps (ה- mid שלך) */
 const MYMAPS_KML = 'https://www.google.com/maps/d/kml?mid=1lscRK6ehG0l2V-XvJ16nsyblMsQ&forcekml=1';
 
 /* ===== מפה ===== */
@@ -97,12 +96,10 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 18, attribution: '&copy; OpenStreetMap'
 }).addTo(map);
 
-// למנוע גלילה מתוך הפאנל
 const toolbar = document.getElementById('toolbar');
 L.DomEvent.disableScrollPropagation(toolbar);
 toolbar.addEventListener('wheel', e=>e.stopPropagation(), {passive:false});
 
-// תיחום כללי
 const boundsUkraine = L.latLngBounds([45.1,22.0],[52.6,40.3]);
 map.fitBounds(boundsUkraine);
 
@@ -163,7 +160,7 @@ function styleForLine(side, dateStr){
 }
 function styleFrontLine(){ return { color: COLOR_FL, weight: 3.5, opacity: 0.9 }; }
 
-/* ===== עזר: חישוב אורך פוליליין בק״מ ===== */
+/* חישוב אורך פוליליין בק״מ */
 function polylineKm(latlngs){
   let km = 0;
   for(let i=1;i<latlngs.length;i++){
@@ -188,39 +185,51 @@ function clearLayers(){
   cluster.clearLayers();
 }
 
-/* --- 1) קו חזית: טעינה אוטומטית מה-KML של המפה שלך --- */
+/* --- 1) קו חזית: להשאיר רק את 2–3 הקווים הארוכים ביותר --- */
 function loadFrontlineFromKML(){
   if(!layerFrontChk.checked) return;
-  // נטען את הקובץ כ־GeoJSON באמצעות Omnivore:
-  const kmlLayer = omnivore.kml(MYMAPS_KML)
+
+  const MIN_SEG_KM = 10;     // לאסוף גם מקטעים בינוניים
+  const KEEP_TOP   = 3;      // לשמור את שלושת הארוכים ביותר
+
+  omnivore.kml(MYMAPS_KML)
     .on('ready', function(){
-      // נסנן: נשאיר רק פוליליינים "ארוכים" (מעל 30 ק״מ) כדי להיפטר מחצים/שבילים קצרים
-      const features = [];
-      this.toGeoJSON().features.forEach(f=>{
-        if(f.geometry && f.geometry.type === 'LineString'){
-          const coords = f.geometry.coordinates.map(c=>L.latLng(c[1], c[0]));
-          if(polylineKm(coords) >= 30){  // סף סינון – אפשר לשנות ל-20/40 לפי תוצאה
-            features.push(coords);
+      const candidates = [];
+
+      const gj = this.toGeoJSON();
+      gj.features.forEach(f=>{
+        if(!f.geometry) return;
+
+        const pushLine = (coords) => {
+          if(!coords || coords.length<2) return;
+          const latlngs = coords.map(c=>L.latLng(c[1], c[0]));
+          const km = polylineKm(latlngs);
+          if(km >= MIN_SEG_KM){
+            candidates.push({km, latlngs});
           }
-        }else if(f.geometry && f.geometry.type === 'MultiLineString'){
-          f.geometry.coordinates.forEach(line=>{
-            const coords = line.map(c=>L.latLng(c[1], c[0]));
-            if(polylineKm(coords) >= 30) features.push(coords);
-          });
+        };
+
+        if(f.geometry.type === 'LineString'){
+          pushLine(f.geometry.coordinates);
+        } else if(f.geometry.type === 'MultiLineString'){
+          f.geometry.coordinates.forEach(pushLine);
         }
       });
 
-      // לצייר את כל המקטעים השחורים
-      features.forEach(coords=>{
-        L.polyline(coords, styleFrontLine()).addTo(frontlineGroup);
+      // מיון מהארוך לקצר ושמירה של הארוכים ביותר
+      candidates.sort((a,b)=>b.km - a.km);
+      const kept = candidates.slice(0, KEEP_TOP);
+
+      kept.forEach(c=>{
+        L.polyline(c.latlngs, styleFrontLine()).addTo(frontlineGroup);
       });
 
-      statusEl.textContent = features.length ? 'קו חזית נטען' : 'לא נמצא קו חזית מתאים ב-KML';
+      statusEl.textContent = kept.length ? `קו חזית נטען (${kept.length} מקטעים ארוכים)` : 'לא זוהו מקטעי חזית ארוכים';
     })
     .on('error', ()=>{ statusEl.textContent = 'שגיאה בטעינת KML'; });
 }
 
-/* --- 2) נתונים משלימים מה-JSON שלנו (קווי התקדמות/נקודות) --- */
+/* --- 2) קווי התקדמות / נקודות מה-JSON שלנו --- */
 async function loadAdvancesAndPoints(){
   try{
     const res = await fetch('updates.json?t='+Date.now(), {cache:'no-store'});
@@ -233,7 +242,6 @@ async function loadAdvancesAndPoints(){
         const st = styleForLine((seg.side||'ru').toLowerCase(), seg.date);
         const pl = L.polyline(seg.coords, st).addTo(linesGroup);
 
-        // חצים לאורך הקו
         const decorator = L.polylineDecorator(pl, {
           patterns: [
             {
