@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Ukraine War Updates – מפה</title>
 
   <!-- Leaflet -->
@@ -18,136 +18,113 @@
     crossorigin=""
   ></script>
 
-  <!-- Omnivore (תומך ב-KML) -->
-  <script src="https://unpkg.com/@mapbox/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
+  <!-- KML -> GeoJSON -->
+  <script src="https://unpkg.com/@tmcw/togeojson@5.8.0/dist/togeojson.umd.js"></script>
 
   <style>
     html, body, #map { height: 100%; margin: 0; }
-    .panel {
-      position: absolute; top: 10px; left: 10px; z-index: 1000;
-      background: rgba(255,255,255,0.95); border: 1px solid #ccc; border-radius: 8px;
-      padding: 10px 12px; line-height: 1.6; font-family: system-ui, -apple-system, "Segoe UI", Arial;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    .leaflet-control-layers-expanded {
+      direction: rtl;
     }
-    .panel label { display: flex; align-items: center; gap: 6px; }
-    .legend { margin-top: 6px; font-size: 12px; color:#555; }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <div class="panel">
-    <div><strong>שכבות</strong></div>
-    <label><input type="checkbox" id="kml-toggle" checked> סימונים מהמפה המקורית (KML)</label>
-
-    <hr style="margin:8px 0">
-    <div><strong>גלגל עכבר</strong></div>
-    <label><input type="checkbox" id="wheel-toggle" checked> פעיל</label>
-    <label>
-      רגישות:
-      <input type="range" id="wheel-sense" min="0.5" max="2.0" step="0.1" value="1.0">
-      <span id="sense-val">1.00×</span>
-    </label>
-
-    <div class="legend">נטען: <span id="ts"></span> • ישויות: <span id="feat-count">0</span></div>
-  </div>
-
   <script>
-    // --- מפה בסיסית ---
+    // === יצירת מפה עם שליטה נוחה בגלגל העכבר ===
     const map = L.map('map', {
-      center: [48.5, 35.5],
+      center: [48.7, 35.0],   // אוקראינה מרכז-מזרח
       zoom: 6,
-      zoomControl: true,
       scrollWheelZoom: true,
-      wheelPxPerZoom: 60,   // רגישות בסיסית
-      zoomSnap: 0.25,
-      zoomDelta: 0.5,
-      inertia: true,
-      inertiaDeceleration: 3000
+      wheelDebounceTime: 20,      // גלגל מגיב מהר אך נשלט
+      wheelPxPerZoomLevel: 80,    // פחות "קופצני"
+      doubleClickZoom: true
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
+    // בסיס OSM
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    const kmlGroup = L.layerGroup().addTo(map);
-    const kmlFile = 'mymap.kml?v=' + Date.now(); // עקיפת קאש
+    // בורר שכבות
+    const layersControl = L.control.layers(
+      { 'מפת בסיס (OSM)': osm },   // base layers
+      {},                           // overlays (נוסיף לאחר טעינת KML)
+      { collapsed: false }
+    ).addTo(map);
 
-    function styleIfVector(l) {
-      if (l && l.setStyle) {
-        // סגנון ברירת מחדל לקווי חזית/פוליגונים אם אין סטיילים בקובץ
-        l.setStyle({ color: '#111', weight: 2.5, opacity: 0.95, fillOpacity: 0.2 });
-      }
-    }
+    // קווי קו-חזית/התקדמות – עיצוב שחור עבה
+    const lineStyle = {
+      color: '#000000',
+      weight: 4,
+      opacity: 1
+    };
 
-    function addLayerAndZoom(layer) {
-      kmlGroup.addLayer(layer);
-      try { map.fitBounds(layer.getBounds(), { padding: [20,20] }); } catch(e){}
-      document.getElementById('ts').textContent = new Date().toLocaleString('he-IL');
-      // ספירת תתי־שכבות
-      let count = 0;
-      layer.eachLayer(() => count++);
-      document.getElementById('feat-count').textContent = count;
-    }
+    // נקודות – כבויות כברירת-מחדל
+    const pointStyle = {
+      radius: 4,
+      color: '#1E88E5',
+      weight: 1,
+      fillColor: '#42A5F5',
+      fillOpacity: 0.9
+    };
 
-    // --- ניסיון 1: טעינה ישירה דרך URL ---
-    let loaded = false;
-    const direct = omnivore.kml(kmlFile)
-      .on('ready', e => {
-        const lyr = e.target;
-        let innerCount = 0;
-        lyr.eachLayer(l => { innerCount++; styleIfVector(l); });
-        if (innerCount > 0) {
-          loaded = true;
-          addLayerAndZoom(lyr);
-        } else {
-          // fallback אם אין תכולה
-          fallbackFetch();
-        }
-      })
-      .on('error', () => fallbackFetch());
-
-    // --- Fallback: fetch כטקסט ואז parse ---
-    async function fallbackFetch() {
-      if (loaded) return;
+    // === טעינת ה־KML, פיצול לשכבות, ותוספת לבורר ===
+    (async () => {
       try {
-        const res = await fetch('mymap.kml?v=' + Date.now(), { cache: 'no-store' });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const text = await res.text();
-        const parsed = omnivore.kml.parse(text);
-        let innerCount = 0;
-        parsed.eachLayer(l => { innerCount++; styleIfVector(l); });
-        if (innerCount === 0) throw new Error('לא נמצאו אובייקטים בקובץ KML');
-        loaded = true;
-        addLayerAndZoom(parsed);
+        const resp = await fetch('mymap.kml', { cache: 'no-cache' });
+        if (!resp.ok) throw new Error('KML load failed');
+        const kmlText = await resp.text();
+
+        // לוודא שזה באמת KML ולא KMZ/קישור ריק
+        if (!kmlText.trim().startsWith('<?xml')) {
+          throw new Error('Not a raw KML file (XML). Make sure it is .kml, not .kmz, and not a NetworkLink.');
+        }
+
+        const xml = new DOMParser().parseFromString(kmlText, 'text/xml');
+        const gj = toGeoJSON.kml(xml);
+        const feats = (gj && gj.features) ? gj.features : [];
+
+        // פיצול: קווים/שטחים לעומת נקודות
+        const lineFeats  = feats.filter(f => f.geometry && f.geometry.type !== 'Point');
+        const pointFeats = feats.filter(f => f.geometry && f.geometry.type === 'Point');
+
+        // שכבת קווים
+        const linesLayer = L.geoJSON({ type: 'FeatureCollection', features: lineFeats }, {
+          style: lineStyle,
+          onEachFeature: (f, layer) => {
+            const name = f.properties && (f.properties.name || f.properties.Name);
+            if (name) layer.bindPopup(name);
+          }
+        }).addTo(map);
+
+        // שכבת נקודות (לא מוסיפים ל-map כברירת-מחדל)
+        const pointsLayer = L.geoJSON({ type: 'FeatureCollection', features: pointFeats }, {
+          pointToLayer: (f, latlng) => L.circleMarker(latlng, pointStyle),
+          onEachFeature: (f, layer) => {
+            const name = f.properties && (f.properties.name || f.properties.Name) || 'Point';
+            layer.bindPopup(name);
+          }
+        });
+
+        // הוספה לבורר שכבות
+        layersControl.addOverlay(linesLayer, 'קווי חזית/התקדמות (KML)');
+        layersControl.addOverlay(pointsLayer, 'נקודות (KML)');
+
+        // התמקדות – אם יש קווים, התאם תצוגה אליהם; אחרת אל כל ה־KML
+        const fitLayer = linesLayer.getLayers().length ? linesLayer : (pointsLayer.getLayers().length ? pointsLayer : null);
+        if (fitLayer) map.fitBounds(fitLayer.getBounds().pad(0.1));
+
       } catch (err) {
         console.error(err);
-        alert('טעינת mymap.kml נכשלה או שהקובץ ריק.\nבדוק/י ששם הקובץ מדויק (כולל אותיות קטנות/גדולות), שהוא נמצא בשורש הריפו, ושיש בו תוכן KML (לא KMZ).');
+        alert('טעינת mymap.kml נכשלה או שהקובץ אינו KML גולמי. ודא שזה קובץ ‎.kml‎ רגיל ולא ‎.kmz‎/NetworkLink.');
       }
-    }
+    })();
 
-    // --- מתגים בלוח הבקרה ---
-    document.getElementById('kml-toggle').addEventListener('change', (ev) => {
-      if (ev.target.checked) map.addLayer(kmlGroup);
-      else map.removeLayer(kmlGroup);
-    });
-
-    const wheelToggle = document.getElementById('wheel-toggle');
-    wheelToggle.addEventListener('change', (ev) => {
-      if (ev.target.checked) map.scrollWheelZoom.enable();
-      else map.scrollWheelZoom.disable();
-    });
-
-    const senseInput = document.getElementById('wheel-sense');
-    const senseVal = document.getElementById('sense-val');
-    function applySensitivity() {
-      const mult = parseFloat(senseInput.value);
-      map.options.wheelPxPerZoom = 60 / mult;  // גדול יותר = רגיש יותר
-      senseVal.textContent = mult.toFixed(2) + '×';
-    }
-    senseInput.addEventListener('input', applySensitivity);
-    applySensitivity();
+    // סרגל קנה מידה
+    L.control.scale({ imperial: false }).addTo(map);
   </script>
 </body>
 </html>
