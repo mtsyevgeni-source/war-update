@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Russo-Ukrainian War</name>
+    <description><![CDATA[See the 25 August 2025 war digest: https://moderngreatgame.watch/2025/08/25/new-issue-of-the-battle-of-ukraine-25-aug-2025/<br><br>]]></description>
+    <NetworkLink>
+      <name>Russo-Ukrainian War</name>
+      <Link>
+        <href>https://www.google.com/maps/d/kml?mid=1lscRK6ehG0l2V-XvJ16nsyblMsQ</href>
+      </Link>
+    </NetworkLink>
+  </Document>
+</kml>
