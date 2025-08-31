@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>מפת עדכונים</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
   <!-- Leaflet -->
   <link
     rel="stylesheet"
@@ -17,7 +18,7 @@
     crossorigin=""
   ></script>
 
-  <!-- תוסף טעינת KML (שומר צבעים/סגנונות של My Maps) -->
+  <!-- תוסף טעינת KML -->
   <script src="https://unpkg.com/leaflet-kml@1.0.1/dist/leaflet-kml.min.js"></script>
 
   <style>
@@ -50,18 +51,16 @@
     const INITIAL_CENTER = [48.9, 36.7];  // מרכז כללי
     const INITIAL_ZOOM   = 7;
 
-    // נתיב קובץ ה-KML שהעלית לריפו
+    // נתיב לקובץ ה-KML שהעלית לריפו
     const ADVANCES_KML_URL = 'advances.kml';
-    // (אופציונלי) אם יש לך KML נוסף של קו חזית, אפשר להטעין גם אותו כאן:
-    // const FRONTLINE_KML_URL = 'frontline.kml';
 
     // --- יצירת המפה ---
     const map = L.map('map', {
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
-      scrollWheelZoom: true,        // גלגל פעיל כברירת מחדל
-      wheelDebounceTime: 20,        // הפחתת "רעד" בגלילה
-      wheelPxPerZoomLevel: 60       // רגישות בסיסית
+      scrollWheelZoom: true,
+      wheelDebounceTime: 20,
+      wheelPxPerZoomLevel: 60
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -82,17 +81,17 @@
     invertEl.addEventListener('change', () => {
       const invert = invertEl.checked ? -1 : 1;
       map.options.zoomDelta = 1 * invert;
-      map.options.zoomSnap  = 0; // זום רציף
+      map.options.zoomSnap  = 0;
     });
 
     senseEl.addEventListener('input', () => {
       const mult = parseFloat(senseEl.value);
-      map.options.wheelPxPerZoomLevel = 60 / mult; // גבוה יותר => זום "מהיר" יותר
+      map.options.wheelPxPerZoomLevel = 60 / mult;
       valEl.textContent = mult.toFixed(2) + '×';
     });
 
-    // --- פונקציה נוחה לטעינת KML ושמירת סגנונות המקור ---
-    function addKml(url, options = {}) {
+    // --- פונקציה לטעינת KML ---
+    function addKml(url) {
       return fetch(url)
         .then(r => {
           if (!r.ok) throw new Error('KML not found: ' + url);
@@ -100,25 +99,18 @@
         })
         .then(txt => {
           const kml = new DOMParser().parseFromString(txt, 'text/xml');
-          const layer = new L.KML(kml, options);
+          const layer = new L.KML(kml);
           layer.addTo(map);
           try { map.fitBounds(layer.getBounds(), { padding: [20,20] }); } catch(e){}
           return layer;
         })
-        .catch(err => {
-          console.warn(err.message);
-          return null;
-        });
+        .catch(err => console.warn(err.message));
     }
 
-    // --- טעינת קווי ההתקדמות מה-KML של My Maps ---
-    // זה יביא את אותם קווים/צבעים שכבר יש במפה המקורית שלך.
+    // --- טעינת קווי ההתקדמות ---
     addKml(ADVANCES_KML_URL);
-
-    // --- (אופציונלי) טעינת KML נוסף של קו החזית אם יש לך קובץ כזה ---
-    // addKml(FRONTLINE_KML_URL, { async: true });
-
   </script>
 </body>
 </html>
+
 
