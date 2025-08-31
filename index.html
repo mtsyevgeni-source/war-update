@@ -20,7 +20,7 @@
     #map{height:100vh;width:100vw}
     #toolbar{
       position:fixed;top:8px;right:8px;z-index:1000;background:#fff;border:1px solid #ddd;
-      border-radius:12px;padding:10px 12px;box-shadow:0 6px 18px rgba(0,0,0,.08);max-width:560px
+      border-radius:12px;padding:10px 12px;box-shadow:0 6px 18px rgba(0,0,0,.08);max-width:600px
     }
     .row{margin-top:.5rem}
     .small{font-size:12px;color:#666}
@@ -33,12 +33,13 @@
 <div id="toolbar">
   <div class="flex">
     <label><input type="checkbox" id="layer-frontline" checked> קו חזית</label>
-    <label><input type="checkbox" id="layer-lines" checked> קווי התקדמות</label>
+    <label><input type="checkbox" id="layer-lines"> קווי התקדמות</label>
     <label><input type="checkbox" id="layer-points" checked> נקודות</label>
     <span class="small">
       <span class="chip" style="background:#000"></span> חזית
       <span class="chip" style="background:#e53935"></span> רוסי
-      <span class="chip" style="background:#1e88e5"></span> אוקראיני • דהוי=&gt;14 יום
+      <span class="chip" style="background:#1e88e5"></span> אוקראיני
+      • דהוי=&gt;14 יום
     </span>
   </div>
   <div class="row"><b>גלגל עכבר</b></div>
@@ -65,10 +66,8 @@ const COLOR_UA = '#1e88e5';
 const COLOR_FL = '#000';
 const REFRESH_MS = 120000;
 
-// KML של המפה ששלחת
 const MYMAPS_KML = 'https://www.google.com/maps/d/kml?mid=1lscRK6ehG0l2V-XvJ16nsyblMsQ&forcekml=1';
 
-// מפה
 const map = L.map('map', {
   zoomControl:true, scrollWheelZoom:true,
   wheelDebounceTime:40, wheelPxPerZoomLevel:80,
@@ -77,28 +76,24 @@ const map = L.map('map', {
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap'}).addTo(map);
 
-// למנוע גלילה כשעומדים על הפאנל
 const panel = document.getElementById('toolbar');
 L.DomEvent.disableScrollPropagation(panel);
 panel.addEventListener('wheel', e=>e.stopPropagation(), {passive:false});
 
-// להתמקד לאזור אוקראינה
 const boundsUA = L.latLngBounds([45.1,22],[52.6,40.3]);
 map.fitBounds(boundsUA);
 
-// שכבות
 const frontlineGroup = L.layerGroup().addTo(map);
 const linesGroup     = L.layerGroup().addTo(map);
 const arrowsGroup    = L.layerGroup().addTo(map);
 const cluster        = L.markerClusterGroup().addTo(map);
 
-// אייקונים
 const iconUA = L.icon({iconUrl:'ua.png',iconSize:[28,20],iconAnchor:[14,10],popupAnchor:[0,-10]});
 const iconRU = L.icon({iconUrl:'ru.png',iconSize:[28,20],iconAnchor:[14,10],popupAnchor:[0,-10]});
 const iconNE = L.icon({iconUrl:'nu.png',iconSize:[24,24],iconAnchor:[12,12],popupAnchor:[0,-10]});
 const iconBySide = s => s==='ua'?iconUA:s==='ru'?iconRU:iconNE;
 
-// שליטת גלגל
+// wheel options
 const wheelEnabled=document.getElementById('wheel-enabled');
 const wheelInvert =document.getElementById('wheel-invert');
 const wheelSens   =document.getElementById('wheel-sens');
@@ -129,7 +124,6 @@ wheelInvert .addEventListener('change',applyWheel);
 wheelSens   .addEventListener('input',()=>wheelLabel.textContent='×'+parseFloat(wheelSens.value).toFixed(2));
 applyWheel();
 
-// עיצוב
 function styleForLine(side,dateStr){
   const color = side==='ua'?COLOR_UA:COLOR_RU;
   let opacity=0.95;
@@ -141,16 +135,12 @@ function styleForLine(side,dateStr){
 }
 const styleFront = {color:COLOR_FL,weight:3.5,opacity:0.9};
 
-// ק"מ
 function polyKm(latlngs){ let km=0; for(let i=1;i<latlngs.length;i++) km+=map.distance(latlngs[i-1],latlngs[i])/1000; return km; }
-// חלק בתוך תיבה
 function fracInBox(latlngs,box){ let n=0; latlngs.forEach(ll=>{ if(box.contains(ll)) n++; }); return n/latlngs.length; }
 
-// תיבת חזית ממוקדת (דרום–מזרח)
-const FRONT_BOX = L.latLngBounds([46.3, 28.0],[50.6, 40.8]);
-
-// זיהוי שם שכבה: רק “קו חזית/מגע”
-const NAME_RE = /(front\s*line|line\s*of\s*contact|contact\s*line|Линия\s*фронта|Линия\s*соприкосновения|линия\s*фронта|линия\s*контакта|ליניית?ה|קו\s*חזית|קו\s*מגע)/i;
+// תיבת חזית מחמירה (דרום–מזרח)
+const FRONT_BOX = L.latLngBounds([46.0, 27.5],[51.2, 40.9]);
+const NAME_RE = /(front\s*line|line\s*of\s*contact|contact\s*line|Линия\s*фронта|Линия\s*соприкосновения|линия\s*фронта|линия\s*контакта|קו\s*חזית|קו\s*מגע)/i;
 
 const statusEl=document.getElementById('status');
 const lastEl=document.getElementById('last');
@@ -166,35 +156,60 @@ function clearAll(){
   cluster.clearLayers();
 }
 
-// === 1) טעינת חזית עם סינון מחמיר ===
+// ממזג את כל מקטעי החזית לפי קירבה בין קצוות
+function mergePolylines(polylines){
+  if(polylines.length===0) return null;
+  // הפוך את כל המקטעים לרשימות LatLng
+  let segs = polylines.map(pl=>pl.getLatLngs().slice());
+  // נתחיל מהארוך ביותר
+  segs.sort((a,b)=>polyKm(b)-polyKm(a));
+  let merged = segs.shift();
+
+  function dist(a,b){ return a.distanceTo(b); }
+
+  while(segs.length){
+    let bestI=-1, bestMode=null, bestD=1e12;
+    const h1 = merged[0], t1 = merged[merged.length-1];
+    for(let i=0;i<segs.length;i++){
+      const s = segs[i], h2=s[0], t2=s[s.length-1];
+      const d1 = dist(t1,h2), d2 = dist(t1,t2), d3 = dist(h1,h2), d4 = dist(h1,t2);
+      const d = Math.min(d1,d2,d3,d4);
+      if(d<bestD){ bestD=d; bestI=i; bestMode=(d===d1?'t1-h2':d===d2?'t1-t2':d===d3?'h1-h2':'h1-t2'); }
+    }
+    const s = segs.splice(bestI,1)[0];
+    if(bestMode==='t1-h2'){ merged = merged.concat(s); }
+    else if(bestMode==='t1-t2'){ merged = merged.concat(s.slice().reverse()); }
+    else if(bestMode==='h1-h2'){ merged = s.slice().reverse().concat(merged); }
+    else { merged = s.concat(merged); }
+  }
+  return L.polyline(merged, styleFront);
+}
+
+// === 1) טעינת חזית עם סינון ואיחוד ===
 function loadFrontlineFromKML(){
   if(!chkFront.checked) return;
 
-  const MIN_KM = 4;         // סף אורך מינימלי לכל מקטע
-  const MIN_FRAC = 0.65;    // לפחות 65% מהנקודות בתוך תיבת החזית
+  const MIN_KM   = 5;      // אורך מינימלי למקטע
+  const MIN_FRAC = 0.8;    // 80% לפחות בתוך תיבת החזית
 
   omnivore.kml(MYMAPS_KML)
     .on('ready', function(){
-      let added=0;
       const gj = this.toGeoJSON();
+      const candidates = [];
 
       gj.features.forEach(f=>{
         if(!f.geometry) return;
-
         const name = (f.properties && (f.properties.name||f.properties.Name||f.properties.title)) || '';
         const nameHit = NAME_RE.test(String(name));
+        if(!nameHit) return;
 
         const pushLine = (coords)=>{
           if(!coords || coords.length<2) return;
           const latlngs = coords.map(c=>L.latLng(c[1],c[0]));
           const km = polyKm(latlngs);
           const frac = fracInBox(latlngs, FRONT_BOX);
-
-          // חייבים גם התאמה בשם שכבה וגם התאמה גיאוגרפית/אורך
-          const pass = (nameHit && frac>=MIN_FRAC && km>=MIN_KM);
-          if(pass){
-            L.polyline(latlngs, styleFront).addTo(frontlineGroup);
-            added++;
+          if(km>=MIN_KM && frac>=MIN_FRAC){
+            candidates.push(L.polyline(latlngs, styleFront));
           }
         };
 
@@ -202,7 +217,14 @@ function loadFrontlineFromKML(){
         else if(f.geometry.type==='MultiLineString'){ f.geometry.coordinates.forEach(pushLine); }
       });
 
-      statusEl.textContent = added ? `חזית: ${added} מקטעים` : 'לא נמצאה שכבת חזית (שם שכבה לא תאם).';
+      frontlineGroup.clearLayers();
+      if(candidates.length){
+        const merged = mergePolylines(candidates);
+        if(merged) merged.addTo(frontlineGroup);
+        statusEl.textContent = `חזית: ${candidates.length} מקטעים (אוחדו לקו אחד)`;
+      }else{
+        statusEl.textContent = 'לא נמצאה שכבת חזית (שם/מיקום לא תאם).';
+      }
     })
     .on('error', ()=>{ statusEl.textContent='שגיאה בטעינת KML'; });
 }
@@ -247,12 +269,12 @@ async function loadAdvancesAndPoints(){
 }
 
 async function loadAll(initial=false){
-  clearAll();
-  statusEl.textContent='טוען נתונים…';
+  frontlineGroup.clearLayers(); linesGroup.clearLayers(); arrowsGroup.clearLayers(); cluster.clearLayers();
+  document.getElementById('status').textContent='טוען נתונים…';
   loadFrontlineFromKML();
   await loadAdvancesAndPoints();
-  lastEl.textContent='עודכן: '+new Date().toLocaleTimeString('he-IL');
-  if(!initial) statusEl.textContent='רענון הושלם';
+  document.getElementById('last').textContent='עודכן: '+new Date().toLocaleTimeString('he-IL');
+  if(!initial) document.getElementById('status').textContent='רענון הושלם';
 }
 
 document.getElementById('refresh').addEventListener('click',()=>loadAll(false));
@@ -264,5 +286,4 @@ setInterval(()=>loadAll(false), REFRESH_MS);
 </script>
 </body>
 </html>
-
 
