@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <title>מפת עדכונים – נקודות + קו חזית (KML/JSON)</title>
+  <title>מפת עדכונים – קווי התקדמות ונקודות</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -11,241 +11,227 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <!-- togeojson: המרה מ-KML ל-GeoJSON -->
-  <script src="https://unpkg.com/@tmcw/togeojson@4.5.0/dist/togeojson.umd.js"></script>
+
   <style>
-    html,body {height:100%;margin:0}
-    body { overflow:hidden; font-family:system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial }
-    #map {height:100vh; width:100vw}
+    html,body{height:100%;margin:0}
+    body{overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    #map{height:100vh;width:100vw}
+
     #toolbar{
-      position:fixed; top:8px; right:8px; z-index:1000;
-      background:#fff; border:1px solid #ddd; border-radius:12px; padding:10px;
-      box-shadow:0 6px 18px rgba(0,0,0,.08); max-width:420px; direction:rtl
+      position:fixed;top:8px;right:8px;z-index:1000;
+      background:#fff;border:1px solid #ddd;border-radius:12px;padding:10px 12px;
+      box-shadow:0 6px 18px rgba(0,0,0,.08);max-width:500px
     }
-    .legend{font-size:12px; line-height:1.4; margin-bottom:.25rem}
     .row{margin-top:.5rem}
-    .filters label{margin-inline-start:.5rem; white-space:nowrap}
-    .popup h4{margin:.2rem 0}
-    .popup small{color:#666}
-    .video-wrap{position:relative; padding-top:56.25%}
-    .video-wrap iframe{position:absolute; inset:0; width:100%; height:100%; border:0}
-    .muted{color:#666; font-size:12px}
-    button{cursor:pointer}
-    .line-legend{display:flex; align-items:center; gap:6px; font-size:12px; color:#333}
-    .line-chip{width:22px; height:6px; border-radius:4px; display:inline-block; border:1px solid #0002}
+    .small{font-size:12px;color:#666}
+    .flex{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+    .slider{width:140px}
+    .chip{width:22px;height:6px;border-radius:4px;display:inline-block;border:1px solid #0002;margin-inline:6px}
   </style>
 </head>
 <body>
 
-<div id="toolbar">
-  <div class="legend"><b>פילטרים</b></div>
-  <div class="filters">
-    <label><input type="checkbox" id="f-ua" checked> צד אוקראיני</label>
-    <label><input type="checkbox" id="f-ru" checked> צד רוסי</label>
-    <label><input type="checkbox" id="f-neutral" checked> נייטרלי/אזרחי</label>
-  </div>
-
-  <div class="filters row">
-    <select id="frontFilter" title="סינון לפי חזית">
-      <option value="all">כל החזיתות</option>
-      <option value="north">צפון (סומי/קורסק)</option>
-      <option value="kharkiv">חרקוב/בלגורוד</option>
-      <option value="donetsk">דונצק/פוקרובסק</option>
-      <option value="zaporizhzhia">זפוריז'יה</option>
-      <option value="kherson">חרסון/קרים</option>
-      <option value="rear">עורף/תשתיות</option>
-    </select>
-  </div>
-
-  <div class="row">
-    <span class="line-legend">
-      <span class="line-chip" style="background:linear-gradient(90deg,#f03,#f69)"></span> קו חזית
+<div id="toolbar" aria-label="לוח בקרה">
+  <div class="flex">
+    <label><input type="checkbox" id="layer-lines" checked> קווי התקדמות</label>
+    <label><input type="checkbox" id="layer-points" checked> נקודות</label>
+    <span class="small">
+      <span class="chip" style="background:#e53935"></span> רוסי
+      <span class="chip" style="background:#1e88e5"></span> אוקראיני
+      <span>• דהוי = יותר מ־14 יום</span>
     </span>
   </div>
 
+  <div class="row"><b>גלגל עכבר</b></div>
+  <div class="flex">
+    <label><input type="checkbox" id="wheel-enabled" checked> פעיל</label>
+    <label><input type="checkbox" id="wheel-invert"> הפוך כיוון</label>
+    <label>רגישות <input id="wheel-sens" class="slider" type="range" min="0.5" max="2" step="0.25" value="1"></label>
+    <span id="wheel-sens-label" class="small">×1.00</span>
+  </div>
+
   <div class="row">
-    <button id="refreshBtn">רענון עכשיו</button>
-    <span id="status" class="muted">ממתין לטעינה…</span><br/>
-    <span id="lastUpdated" class="muted"></span>
+    <button id="refresh">רענון עכשיו</button>
+    <span id="status" class="small">ממתין לטעינה…</span><br>
+    <span id="last" class="small"></span>
   </div>
 </div>
 
-<div id="map" aria-label="מפת עדכונים"></div>
+<div id="map"></div>
 
 <script>
-/* ===== רענון ===== */
-const REFRESH_EVERY_MS = 2 * 60 * 1000;
-const statusEl = document.getElementById('status');
-const lastUpdatedEl = document.getElementById('lastUpdated');
-const refreshBtn = document.getElementById('refreshBtn');
+/* ===== קבועים ===== */
+const FADE_AFTER_DAYS = 14;
+const COLOR_RU = '#e53935';
+const COLOR_UA = '#1e88e5';
+const REFRESH_MS = 2 * 60 * 1000;
 
 /* ===== מפה ===== */
 const map = L.map('map', {
   zoomControl: true,
-  scrollWheelZoom: true,
+  scrollWheelZoom: false,  // ננהל ידנית כדי לשלוט בכיוון/רגישות
   touchZoom: 'center',
   zoomSnap: 0.25,
   zoomDelta: 0.25
 }).setView([48.9, 31.4], 6);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 18, attribution: '&copy; OpenStreetMap'
+  maxZoom: 18,
+  attribution: '&copy; OpenStreetMap'
 }).addTo(map);
 
-const toolbarEl = document.getElementById('toolbar');
-L.DomEvent.disableScrollPropagation(toolbarEl);
+// תיחום אוקראינה
+const boundsUkraine = L.latLngBounds([45.1,22.0],[52.6,40.3]);
+map.fitBounds(boundsUkraine);
 
-/* ===== אייקונים ===== */
-const iconUA = L.icon({ iconUrl: 'ua.png', iconSize: [28,20], iconAnchor: [14,10], popupAnchor: [0,-10] });
-const iconRU = L.icon({ iconUrl: 'ru.png', iconSize: [28,20], iconAnchor: [14,10], popupAnchor: [0,-10] });
-const iconNE = L.icon({ iconUrl: 'nu.png', iconSize: [24,24], iconAnchor: [12,12], popupAnchor: [0,-10] });
-function iconBySide(side){ return side==='ua'?iconUA : side==='ru'?iconRU : iconNE; }
+// למנוע גלילה בתוך התיבה
+L.DomEvent.disableScrollPropagation(document.getElementById('toolbar'));
+L.DomEvent.on(document.getElementById('toolbar'),'wheel',e=>e.stopPropagation(),{passive:false});
 
 /* ===== שכבות ===== */
-const cluster = L.markerClusterGroup();
+const linesGroup  = L.layerGroup().addTo(map);
+const cluster     = L.markerClusterGroup();
 map.addLayer(cluster);
-let pointMarkers = [];
-let frontlineGroup = L.layerGroup().addTo(map);
 
-/* ===== פופאפים ===== */
-function buildPopup(item){
-  const date = item.date ? new Date(item.date).toLocaleDateString('he-IL') : '';
-  let mediaHTML = '';
-  if(item.media?.type === 'youtube' && item.media.id){
-    mediaHTML = `<div class="video-wrap"><iframe src="https://www.youtube.com/embed/${item.media.id}" allowfullscreen></iframe></div>`;
-  } else if(item.media?.type === 'link' && item.media.url){
-    mediaHTML = `<p><a href="${item.media.url}" target="_blank" rel="noopener">צפה בסרטון/מקור</a></p>`;
-  }
-  return `<div class="popup"><h4>${item.title??'עדכון'}</h4><small>${date}${item.front?` • חזית: ${item.front}`:''}</small><p>${item.summary??''}</p>${mediaHTML}</div>`;
+/* ===== אייקונים לנקודות ===== */
+const iconUA = L.icon({ iconUrl:'ua.png', iconSize:[28,20], iconAnchor:[14,10], popupAnchor:[0,-10] });
+const iconRU = L.icon({ iconUrl:'ru.png', iconSize:[28,20], iconAnchor:[14,10], popupAnchor:[0,-10] });
+const iconNE = L.icon({ iconUrl:'nu.png', iconSize:[24,24], iconAnchor:[12,12], popupAnchor:[0,-10] });
+function iconBySide(s){ return s==='ua'?iconUA : s==='ru'?iconRU : iconNE; }
+
+/* ===== UI גלגל ===== */
+const wheelEnabled = document.getElementById('wheel-enabled');
+const wheelInvert  = document.getElementById('wheel-invert');
+const wheelSens    = document.getElementById('wheel-sens');
+const wheelLabel   = document.getElementById('wheel-sens-label');
+
+// שיחזור העדפות
+let wheelState = {
+  enabled: JSON.parse(localStorage.getItem('wheel_enabled') || 'true'),
+  invert:  JSON.parse(localStorage.getItem('wheel_invert')  || 'false'),
+  sens:    parseFloat(localStorage.getItem('wheel_sens')    || '1')
+};
+function saveWheel(){
+  localStorage.setItem('wheel_enabled', JSON.stringify(wheelState.enabled));
+  localStorage.setItem('wheel_invert',  JSON.stringify(wheelState.invert));
+  localStorage.setItem('wheel_sens',    String(wheelState.sens));
+}
+function applyWheelUI(){
+  wheelEnabled.checked = wheelState.enabled;
+  wheelInvert.checked  = wheelState.invert;
+  wheelSens.value      = wheelState.sens;
+  wheelLabel.textContent = '×' + wheelState.sens.toFixed(2);
+}
+applyWheelUI();
+
+function onWheel(e){
+  if(!wheelState.enabled) return;
+  e.preventDefault();
+  const dir = Math.sign(e.deltaY);
+  const sign = wheelState.invert ? -dir : dir;
+  const step = 0.25 * wheelState.sens; // רגישות
+  const newZoom = map.getZoom() - sign * step; // גלילה קדימה = התקרבות (ברירת מחדל)
+  map.setZoomAround(e, newZoom);
 }
 
-/* ===== נקודות ===== */
-function drawPoints(points){
-  pointMarkers.forEach(m => cluster.removeLayer(m));
-  pointMarkers = [];
-  if(!Array.isArray(points)) return;
+function attachWheel(){ map._container.addEventListener('wheel', onWheel, {passive:false}); }
+function detachWheel(){ map._container.removeEventListener('wheel', onWheel, {passive:false}); }
+wheelState.enabled ? attachWheel() : detachWheel();
 
-  const showUA = document.getElementById('f-ua').checked;
-  const showRU = document.getElementById('f-ru').checked;
-  const showNE = document.getElementById('f-neutral').checked;
-  const frontSel = document.getElementById('frontFilter').value;
+wheelEnabled.addEventListener('change', ()=>{
+  wheelState.enabled = wheelEnabled.checked;
+  saveWheel();
+  wheelState.enabled ? attachWheel() : detachWheel();
+});
+wheelInvert.addEventListener('change', ()=>{
+  wheelState.invert = wheelInvert.checked; saveWheel();
+});
+wheelSens.addEventListener('input', ()=>{
+  wheelState.sens = parseFloat(wheelSens.value);
+  wheelLabel.textContent = '×' + wheelState.sens.toFixed(2);
+  saveWheel();
+});
 
-  points.forEach(item=>{
-    const lat = parseFloat(item.lat), lng = parseFloat(item.lng);
-    if(isNaN(lat) || isNaN(lng)) return;
+/* ===== טעינה מה־JSON ===== */
+const statusEl = document.getElementById('status');
+const lastEl   = document.getElementById('last');
+const btnRefresh = document.getElementById('refresh');
 
-    const side = (item.side||'neutral').toLowerCase();
-    const front = item.front || 'all';
+const layerLinesChk  = document.getElementById('layer-lines');
+const layerPointsChk = document.getElementById('layer-points');
 
-    const sideOK = (side==='ua'&&showUA) || (side==='ru'&&showRU) || ((side!=='ua'&&side!=='ru')&&showNE);
-    const frontOK = (frontSel==='all') || (frontSel===front);
-    if(!sideOK || !frontOK) return;
-
-    const marker = L.marker([lat,lng], {icon: iconBySide(side)}).bindPopup(buildPopup(item), {maxWidth: 360});
-    pointMarkers.push(marker);
-    cluster.addLayer(marker);
-  });
-}
-
-/* ===== קו חזית: מציירים כל קטע בנפרד ===== */
-function drawFrontlineSegmentsFromGeoJSON(geojson){
-  frontlineGroup.clearLayers();
-  if(!geojson || !Array.isArray(geojson.features)) return;
-
-  const style = { color:'#f03', weight:3, opacity:0.9 };
-
-  geojson.features.forEach(f=>{
-    const g = f.geometry;
-    if(!g) return;
-
-    // LineString – קטע יחיד
-    if(g.type === 'LineString'){
-      const latlngs = g.coordinates.map(([lng,lat]) => [lat,lng]);
-      if(latlngs.length >= 2){
-        L.polyline(latlngs, style).addTo(frontlineGroup);
-      }
-    }
-
-    // MultiLineString – כמה קטעים נפרדים
-    if(g.type === 'MultiLineString'){
-      g.coordinates.forEach(line=>{
-        const latlngs = line.map(([lng,lat]) => [lat,lng]);
-        if(latlngs.length >= 2){
-          L.polyline(latlngs, style).addTo(frontlineGroup);
-        }
-      });
-    }
-  });
-}
-
-/* ===== טעינת updates.json ===== */
 let lastHash = null;
 
-async function fetchJSON(){
-  const res = await fetch(`updates.json?t=${Date.now()}`, {cache:'no-store'});
-  if(!res.ok) throw new Error('HTTP '+res.status);
-  return res.json();
+function styleForLine(side, dateStr){
+  const color = side==='ua'?COLOR_UA:COLOR_RU;
+  let opacity = 0.95;
+  if(dateStr){
+    const days = (Date.now() - new Date(dateStr)) / (1000*60*60*24);
+    if(days > FADE_AFTER_DAYS) opacity = 0.35;
+  }
+  return { color, weight: 3, opacity };
 }
 
-async function loadKmlAndDraw(kmlUrl){
-  const res = await fetch(kmlUrl);
-  if(!res.ok) throw new Error('KML HTTP '+res.status);
-  const text = await res.text();
-  const dom = new DOMParser().parseFromString(text, 'text/xml');
-  const gj = toGeoJSON.kml(dom); // GeoJSON
-  drawFrontlineSegmentsFromGeoJSON(gj);
+function clearLayers(){
+  linesGroup.clearLayers();
+  cluster.clearLayers();
 }
 
-async function loadAll(initial=false){
-  try {
-    statusEl.textContent='טוען נתונים…';
-    const raw = await fetchJSON();
-    const hash = JSON.stringify(raw);
-    const changed = hash !== lastHash; lastHash = hash;
+async function loadData(initial=false){
+  try{
+    statusEl.textContent = 'טוען נתונים…';
+    const res = await fetch('updates.json?t='+Date.now(), {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    const hash = JSON.stringify(data);
+    const changed = (hash !== lastHash); lastHash = hash;
 
-    // נרמול מבנה
-    let points = [];
-    let frontline = [];
-    let frontlineKml = null;
+    clearLayers();
 
-    if(Array.isArray(raw)){ // פורמט ישן: רק נקודות
-      points = raw;
-    } else if (raw && typeof raw === 'object'){
-      points = Array.isArray(raw.points) ? raw.points : [];
-      frontline = Array.isArray(raw.frontline) ? raw.frontline : [];
-      frontlineKml = typeof raw.frontlineKml === 'string' ? raw.frontlineKml : null;
+    // קווים
+    if(layerLinesChk.checked && Array.isArray(data.advances)){
+      data.advances.forEach(seg=>{
+        if(!Array.isArray(seg.coords) || seg.coords.length < 2) return;
+        const st = styleForLine((seg.side||'ru').toLowerCase(), seg.date);
+        L.polyline(seg.coords, st).addTo(linesGroup);
+      });
     }
 
-    drawPoints(points);
-
-    frontlineGroup.clearLayers();
-    if(frontline.length >= 2){
-      // אם מגיע כקואורדינטות – גם כאן לא מחברים הכל; מציירים קטע אחד
-      L.polyline(frontline, {color:'#f03', weight:3, opacity:0.9}).addTo(frontlineGroup);
-    } else if(frontlineKml){
-      await loadKmlAndDraw(frontlineKml);
+    // נקודות (לא חובה)
+    if(layerPointsChk.checked && Array.isArray(data.points)){
+      data.points.forEach(p=>{
+        const lat = parseFloat(p.lat), lng = parseFloat(p.lng);
+        if(isNaN(lat)||isNaN(lng)) return;
+        const side = (p.side||'neutral').toLowerCase();
+        const marker = L.marker([lat,lng], {icon: iconBySide(side)});
+        let html = `<div class="popup"><h4>${p.title||'עדכון'}</h4>`;
+        if(p.date) html += `<div class="small">${new Date(p.date).toLocaleDateString('he-IL')}</div>`;
+        if(p.summary) html += `<p>${p.summary}</p>`;
+        if(p.media?.type==='youtube' && p.media.id){
+          html += `<div style="position:relative;padding-top:56.25%"><iframe style="position:absolute;inset:0;width:100%;height:100%;border:0" src="https://www.youtube.com/embed/${p.media.id}" allowfullscreen></iframe></div>`;
+        } else if(p.media?.type==='link' && p.media.url){
+          html += `<p><a href="${p.media.url}" target="_blank" rel="noopener">לצפייה במקור</a></p>`;
+        }
+        html += `</div>`;
+        marker.bindPopup(html, {maxWidth:360});
+        cluster.addLayer(marker);
+      });
     }
 
-    lastUpdatedEl.textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
+    lastEl.textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
     statusEl.textContent = changed ? 'נמצא עדכון חדש' : (initial ? 'נטען' : 'אין שינוי');
-  } catch (e){
-    console.error(e);
+  }catch(err){
+    console.error(err);
     statusEl.textContent = 'שגיאה בטעינה';
   }
 }
 
-loadAll(true);
-refreshBtn.addEventListener('click', ()=>loadAll(false));
-setInterval(()=>loadAll(false), REFRESH_EVERY_MS);
+btnRefresh.addEventListener('click', ()=>loadData(false));
+layerLinesChk.addEventListener('change', ()=>loadData(false));
+layerPointsChk.addEventListener('change', ()=>loadData(false));
 
-/* ===== התאמת תצוגה ראשונית ===== */
-const boundsUkraine = L.latLngBounds([45.1,22.0],[52.6,40.3]);
-map.fitBounds(boundsUkraine);
-
-/* ריענון בעת שינוי פילטרים */
-['f-ua','f-ru','f-neutral','frontFilter'].forEach(id=>{
-  document.getElementById(id).addEventListener('change', ()=>loadAll(false));
-});
+loadData(true);
+setInterval(()=>loadData(false), REFRESH_MS);
 </script>
 </body>
 </html>
