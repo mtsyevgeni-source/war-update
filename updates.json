@@ -2,17 +2,6 @@
   "points": [
     {
       "id": 1,
-      "lat": 51.03,
-      "lng": 34.68,
-      "title": "קרבות ביונאקיבקה (סומי)",
-      "date": "2025-08-31",
-      "side": "ru",
-      "front": "north",
-      "media": {"type":"youtube", "id":"dQw4w9WgXcQ"},
-      "summary": "דיווח על לחימה והתקדמות מקומית."
-    },
-    {
-      "id": 2,
       "lat": 50.07,
       "lng": 36.94,
       "title": "וולצ׳נסק (חרקוב)",
@@ -20,16 +9,8 @@
       "side": "ua",
       "front": "kharkiv",
       "media": {"type":"link", "url":"https://example.com"},
-      "summary": "ניסיונות בלימה בשכונות המזרחיות."
+      "summary": "דוגמת נקודה (אפשר למחוק)."
     }
   ],
-  "frontline": [
-    [51.200, 34.300],
-    [50.900, 34.900],
-    [50.400, 35.600],
-    [49.900, 36.300],
-    [49.400, 36.900],
-    [48.900, 37.300],
-    [48.400, 37.600]
-  ]
+  "frontlineKml": "https://www.google.com/maps/d/kml?mid=1lscRK6ehG0l2V-XvJ16nsyblMsQ&forcekml=1"
 }
