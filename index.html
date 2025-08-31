@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <title>מפת עדכונים – קווי התקדמות ונקודות</title>
+  <title>מפת עדכונים – קווי התקדמות + קו חזית</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -20,7 +20,7 @@
     #toolbar{
       position:fixed;top:8px;right:8px;z-index:1000;
       background:#fff;border:1px solid #ddd;border-radius:12px;padding:10px 12px;
-      box-shadow:0 6px 18px rgba(0,0,0,.08);max-width:500px
+      box-shadow:0 6px 18px rgba(0,0,0,.08);max-width:520px
     }
     .row{margin-top:.5rem}
     .small{font-size:12px;color:#666}
@@ -33,12 +33,14 @@
 
 <div id="toolbar" aria-label="לוח בקרה">
   <div class="flex">
+    <label><input type="checkbox" id="layer-frontline" checked> קו חזית</label>
     <label><input type="checkbox" id="layer-lines" checked> קווי התקדמות</label>
     <label><input type="checkbox" id="layer-points" checked> נקודות</label>
     <span class="small">
+      <span class="chip" style="background:#000"></span> חזית
       <span class="chip" style="background:#e53935"></span> רוסי
       <span class="chip" style="background:#1e88e5"></span> אוקראיני
-      <span>• דהוי = יותר מ־14 יום</span>
+      <span>• דהוי = >14 יום</span>
     </span>
   </div>
 
@@ -46,7 +48,9 @@
   <div class="flex">
     <label><input type="checkbox" id="wheel-enabled" checked> פעיל</label>
     <label><input type="checkbox" id="wheel-invert"> הפוך כיוון</label>
-    <label>רגישות <input id="wheel-sens" class="slider" type="range" min="0.5" max="2" step="0.25" value="1"></label>
+    <label>רגישות
+      <input id="wheel-sens" class="slider" type="range" min="0.5" max="2" step="0.25" value="1">
+    </label>
     <span id="wheel-sens-label" class="small">×1.00</span>
   </div>
 
@@ -64,33 +68,37 @@
 const FADE_AFTER_DAYS = 14;
 const COLOR_RU = '#e53935';
 const COLOR_UA = '#1e88e5';
+const COLOR_FL = '#000000';
 const REFRESH_MS = 2 * 60 * 1000;
 
-/* ===== מפה ===== */
+/* ===== מפה (גלגל של Leaflet מופעל כברירת מחדל) ===== */
 const map = L.map('map', {
   zoomControl: true,
-  scrollWheelZoom: false,  // ננהל ידנית כדי לשלוט בכיוון/רגישות
+  scrollWheelZoom: true,              // <<<<< שיהיה עובד בוודאות
+  wheelDebounceTime: 40,
+  wheelPxPerZoomLevel: 80,
   touchZoom: 'center',
   zoomSnap: 0.25,
   zoomDelta: 0.25
 }).setView([48.9, 31.4], 6);
 
+// שכבת רקע
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 18,
   attribution: '&copy; OpenStreetMap'
 }).addTo(map);
 
+// למנוע גלילה בתוך התיבה
+L.DomEvent.disableScrollPropagation(document.getElementById('toolbar'));
+
 // תיחום אוקראינה
 const boundsUkraine = L.latLngBounds([45.1,22.0],[52.6,40.3]);
 map.fitBounds(boundsUkraine);
 
-// למנוע גלילה בתוך התיבה
-L.DomEvent.disableScrollPropagation(document.getElementById('toolbar'));
-L.DomEvent.on(document.getElementById('toolbar'),'wheel',e=>e.stopPropagation(),{passive:false});
-
 /* ===== שכבות ===== */
-const linesGroup  = L.layerGroup().addTo(map);
-const cluster     = L.markerClusterGroup();
+const frontlineGroup = L.layerGroup().addTo(map);
+const linesGroup     = L.layerGroup().addTo(map);
+const cluster        = L.markerClusterGroup();
 map.addLayer(cluster);
 
 /* ===== אייקונים לנקודות ===== */
@@ -99,69 +107,55 @@ const iconRU = L.icon({ iconUrl:'ru.png', iconSize:[28,20], iconAnchor:[14,10], 
 const iconNE = L.icon({ iconUrl:'nu.png', iconSize:[24,24], iconAnchor:[12,12], popupAnchor:[0,-10] });
 function iconBySide(s){ return s==='ua'?iconUA : s==='ru'?iconRU : iconNE; }
 
-/* ===== UI גלגל ===== */
+/* ===== שליטה בגלגל (Invert + רגישות) ===== */
 const wheelEnabled = document.getElementById('wheel-enabled');
 const wheelInvert  = document.getElementById('wheel-invert');
 const wheelSens    = document.getElementById('wheel-sens');
 const wheelLabel   = document.getElementById('wheel-sens-label');
 
-// שיחזור העדפות
-let wheelState = {
-  enabled: JSON.parse(localStorage.getItem('wheel_enabled') || 'true'),
-  invert:  JSON.parse(localStorage.getItem('wheel_invert')  || 'false'),
-  sens:    parseFloat(localStorage.getItem('wheel_sens')    || '1')
-};
-function saveWheel(){
-  localStorage.setItem('wheel_enabled', JSON.stringify(wheelState.enabled));
-  localStorage.setItem('wheel_invert',  JSON.stringify(wheelState.invert));
-  localStorage.setItem('wheel_sens',    String(wheelState.sens));
+let customWheelAttached = false;
+function attachCustomWheel(){
+  if(customWheelAttached) return;
+  customWheelAttached = true;
+  map._container.addEventListener('wheel', customWheelHandler, {passive:false});
 }
-function applyWheelUI(){
-  wheelEnabled.checked = wheelState.enabled;
-  wheelInvert.checked  = wheelState.invert;
-  wheelSens.value      = wheelState.sens;
-  wheelLabel.textContent = '×' + wheelState.sens.toFixed(2);
+function detachCustomWheel(){
+  if(!customWheelAttached) return;
+  customWheelAttached = false;
+  map._container.removeEventListener('wheel', customWheelHandler, {passive:false});
 }
-applyWheelUI();
-
-function onWheel(e){
-  if(!wheelState.enabled) return;
+function customWheelHandler(e){
+  if(!wheelEnabled.checked) return;
   e.preventDefault();
-  const dir = Math.sign(e.deltaY);
-  const sign = wheelState.invert ? -dir : dir;
-  const step = 0.25 * wheelState.sens; // רגישות
-  const newZoom = map.getZoom() - sign * step; // גלילה קדימה = התקרבות (ברירת מחדל)
+  const sign = Math.sign(e.deltaY);
+  const dir = wheelInvert.checked ? -sign : sign; // גלילה קדימה = התקרבות (כשלא הפוך)
+  const step = 0.25 * parseFloat(wheelSens.value);
+  const newZoom = map.getZoom() - dir * step;
   map.setZoomAround(e, newZoom);
 }
 
-function attachWheel(){ map._container.addEventListener('wheel', onWheel, {passive:false}); }
-function detachWheel(){ map._container.removeEventListener('wheel', onWheel, {passive:false}); }
-wheelState.enabled ? attachWheel() : detachWheel();
+// מצב התחלתי: להשתמש במנוע המובנה של Leaflet; אם מבקשים "הפוך כיוון" נעבור לידני
+function applyWheelMode(){
+  if(!wheelEnabled.checked){
+    map.scrollWheelZoom.disable();
+    detachCustomWheel();
+    return;
+  }
+  if(wheelInvert.checked){
+    map.scrollWheelZoom.disable(); // נשתלט
+    attachCustomWheel();
+  }else{
+    detachCustomWheel();
+    map.scrollWheelZoom.enable();  // ברירת מחדל – הכי חלק
+  }
+  wheelLabel.textContent = '×' + parseFloat(wheelSens.value).toFixed(2);
+}
+wheelEnabled.addEventListener('change', applyWheelMode);
+wheelInvert .addEventListener('change', applyWheelMode);
+wheelSens   .addEventListener('input', ()=> wheelLabel.textContent = '×' + parseFloat(wheelSens.value).toFixed(2));
+applyWheelMode();
 
-wheelEnabled.addEventListener('change', ()=>{
-  wheelState.enabled = wheelEnabled.checked;
-  saveWheel();
-  wheelState.enabled ? attachWheel() : detachWheel();
-});
-wheelInvert.addEventListener('change', ()=>{
-  wheelState.invert = wheelInvert.checked; saveWheel();
-});
-wheelSens.addEventListener('input', ()=>{
-  wheelState.sens = parseFloat(wheelSens.value);
-  wheelLabel.textContent = '×' + wheelState.sens.toFixed(2);
-  saveWheel();
-});
-
-/* ===== טעינה מה־JSON ===== */
-const statusEl = document.getElementById('status');
-const lastEl   = document.getElementById('last');
-const btnRefresh = document.getElementById('refresh');
-
-const layerLinesChk  = document.getElementById('layer-lines');
-const layerPointsChk = document.getElementById('layer-points');
-
-let lastHash = null;
-
+/* ===== עזרי עיצוב ===== */
 function styleForLine(side, dateStr){
   const color = side==='ua'?COLOR_UA:COLOR_RU;
   let opacity = 0.95;
@@ -171,8 +165,23 @@ function styleForLine(side, dateStr){
   }
   return { color, weight: 3, opacity };
 }
+function styleFrontLine(){
+  return { color: COLOR_FL, weight: 3.5, opacity: 0.9 };
+}
+
+/* ===== טעינה מה־JSON ===== */
+const statusEl = document.getElementById('status');
+const lastEl   = document.getElementById('last');
+const btnRefresh = document.getElementById('refresh');
+
+const layerFrontChk = document.getElementById('layer-frontline');
+const layerLinesChk = document.getElementById('layer-lines');
+const layerPointsChk= document.getElementById('layer-points');
+
+let lastHash = null;
 
 function clearLayers(){
+  frontlineGroup.clearLayers();
   linesGroup.clearLayers();
   cluster.clearLayers();
 }
@@ -188,7 +197,17 @@ async function loadData(initial=false){
 
     clearLayers();
 
-    // קווים
+    // קו חזית שחור
+    if(layerFrontChk.checked && Array.isArray(data.frontline)){
+      // אפשר כמה מקטעים – כל מקטע מצויר כ־polyline
+      data.frontline.forEach(seg=>{
+        if(Array.isArray(seg.coords) && seg.coords.length>=2){
+          L.polyline(seg.coords, styleFrontLine()).addTo(frontlineGroup);
+        }
+      });
+    }
+
+    // קווי התקדמות (אדום/כחול, דהייה אחרי 14 יום)
     if(layerLinesChk.checked && Array.isArray(data.advances)){
       data.advances.forEach(seg=>{
         if(!Array.isArray(seg.coords) || seg.coords.length < 2) return;
@@ -197,7 +216,7 @@ async function loadData(initial=false){
       });
     }
 
-    // נקודות (לא חובה)
+    // נקודות אירוע (רשות)
     if(layerPointsChk.checked && Array.isArray(data.points)){
       data.points.forEach(p=>{
         const lat = parseFloat(p.lat), lng = parseFloat(p.lng);
@@ -227,6 +246,7 @@ async function loadData(initial=false){
 }
 
 btnRefresh.addEventListener('click', ()=>loadData(false));
+layerFrontChk.addEventListener('change', ()=>loadData(false));
 layerLinesChk.addEventListener('change', ()=>loadData(false));
 layerPointsChk.addEventListener('change', ()=>loadData(false));
 
@@ -235,3 +255,4 @@ setInterval(()=>loadData(false), REFRESH_MS);
 </script>
 </body>
 </html>
+
