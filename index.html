@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>מפת עדכונים – קו חזית וקווי התקדמות</title>
 
-  <!-- Leaflet -->
   <link rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
@@ -13,8 +12,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
           crossorigin=""></script>
-
-  <!-- Omnivore (KML -> GeoJSON בדפדפן) -->
   <script src="https://unpkg.com/@mapbox/leaflet-omnivore/leaflet-omnivore.min.js"></script>
 
   <style>
@@ -68,12 +65,10 @@
   </div>
 
   <script>
-    // ===== קבצים & קבועים =====
     const KML_URL = "advances.kml";
     const COLORS = { frontline:"#000000", ru:"#e43b3b", ua:"#2b6de5" };
     const WEIGHT = 3, OPACITY = 0.9;
 
-    // ===== מפה =====
     const map = L.map('map', {
       center:[48.7, 36.8], zoom:7,
       scrollWheelZoom:true, wheelPxPerZoomLevel:60,
@@ -118,119 +113,158 @@
 
     const statusEl = document.getElementById('status');
 
-    // ===== עזר: המרת צבע aabbggrr (KML) ל-#rrggbb =====
+    // === עזר: צבע aabbggrr של KML -> #rrggbb
     function kmlColorToHexRGB(kml){
-      // דוגמאות: ff000000 (שחור), ff0000ff (אדום), ffff0000 (כחול)
       if(!kml || kml.length !== 8) return null;
-      const a = kml.substring(0,2),
-            bb = kml.substring(2,4),
+      const bb = kml.substring(2,4),
             gg = kml.substring(4,6),
             rr = kml.substring(6,8);
       return `#${rr}${gg}${bb}`.toLowerCase();
     }
 
-    function isCloseTo(c, target){
-      // השוואת צבעים בפשטות (ללא דלתא): אפשר להרחיב אם צריך
-      return (c || "").toLowerCase() === target.toLowerCase();
+    // מילות מפתח לזיהוי לפי שם התיקייה
+    const RU_KEYS = ['russian','russia','rus','ru','רוס','אדום'];
+    const UA_KEYS = ['ukrainian','ukraine','ukr','ua','אוק','כחול'];
+    function guessByFolderName(name){
+      const s = (name||'').toLowerCase();
+      if(RU_KEYS.some(k=>s.includes(k))) return 'ru';
+      if(UA_KEYS.some(k=>s.includes(k))) return 'ua';
+      return null;
     }
 
-    // ===== שלבים: 1) בונים מפת styleId->color מתוך ה-KML =====
-    async function buildStyleMap(){
-      const res = await fetch(KML_URL, {cache:"no-store"});
+    // בניית מיפוי styleUrl→צבע + מיפוי Placemark→סיווג ע"פ שושלת תיקיות
+    async function parseKmlMeta(){
+      const res = await fetch(KML_URL, {cache:'no-store'});
       const txt = await res.text();
       const xml = new DOMParser().parseFromString(txt, "text/xml");
 
-      const mapStyle = {};
-
-      // 1. <Style id="..."><LineStyle><color>...</color></LineStyle>
+      const styleColor = {};
       xml.querySelectorAll('Style').forEach(st=>{
         const id = st.getAttribute('id');
-        const colorEl = st.querySelector('LineStyle > color');
-        if(id && colorEl && colorEl.textContent){
-          const hex = kmlColorToHexRGB(colorEl.textContent.trim());
-          if(hex) mapStyle['#'+id] = hex;   // styleUrl מגיע עם #
-        }
+        const c = st.querySelector('LineStyle > color')?.textContent?.trim();
+        if(id && c){ const hex = kmlColorToHexRGB(c); if(hex) styleColor['#'+id] = hex; }
       });
-
-      // 2. <StyleMap id="..."> -> מפענחים את ה"normal" אם מצוין
       xml.querySelectorAll('StyleMap').forEach(sm=>{
         const id = sm.getAttribute('id');
-        const pairs = sm.querySelectorAll('Pair');
         let normalUrl = null;
-        pairs.forEach(p=>{
+        sm.querySelectorAll('Pair').forEach(p=>{
           const key = p.querySelector('key')?.textContent?.trim();
           const url = p.querySelector('styleUrl')?.textContent?.trim();
-          if(key === 'normal' && url) normalUrl = url;
+          if(key==='normal' && url) normalUrl = url;
         });
-        if(id && normalUrl && mapStyle[normalUrl]){
-          mapStyle['#'+id] = mapStyle[normalUrl];
+        if(id && normalUrl && styleColor[normalUrl]){
+          styleColor['#'+id] = styleColor[normalUrl];
         }
       });
 
-      return mapStyle; // דוגמה: {'#front': '#000000', '#ru-red':'#ff0000', '#ua-blue':'#0000ff'}
+      // לכל Placemark נאתר את שרשרת הורים (Folders) ונגזור סיווג לפי שם
+      const folderStack = [];
+      const placemarkClass = new Map();
+
+      function walk(node){
+        if(node.nodeName==='Folder'){
+          const nm = node.querySelector(':scope > name')?.textContent || '';
+          folderStack.push(nm);
+          node.childNodes.forEach(walk);
+          folderStack.pop();
+          return;
+        }
+        if(node.nodeName==='Placemark'){
+          const id = node.querySelector(':scope > name')?.textContent || '';
+          // חיפוש styleUrl ישיר
+          const styleUrl = node.querySelector(':scope > styleUrl')?.textContent?.trim() || '';
+          // סיווג ע"י שם תיקייה
+          let cls = null;
+          for(let i=folderStack.length-1;i>=0;i--){
+            const g = guessByFolderName(folderStack[i]);
+            if(g){ cls = g; break; }
+          }
+          // נשמור לפי מזהה פנימי (ניעזר בטקסט ה-XML של ה-placemark כדי לזהות אח"כ)
+          placemarkClass.set(node, {cls, styleUrl});
+          return;
+        }
+        node.childNodes.forEach(walk);
+      }
+      walk(xml.documentElement);
+
+      return {styleColor, placemarkClass, xml};
     }
 
-    // ===== 2) טוענים את ה-KML כ-GeoJSON ומציירים לפי styleUrl =====
-    function drawGeoJSONWithStyles(styleMap){
-      const gjLayer = omnivore.kml(KML_URL)
-        .on('ready', function(){
-          const gj = this.toGeoJSON();
-          let bounds = null;
-
-          (gj.features || []).forEach(f=>{
-            const g = f.geometry;
-            if(!g) return;
-
-            // לא מציירים נקודות
-            if(g.type === "Point" || g.type === "MultiPoint") return;
-
-            // סיווג לפי styleUrl -> צבע
-            const styleUrl = (f.properties?.styleUrl || "").trim();
-            const hex = styleMap[styleUrl] || "#000000";
-
-            let cls = "frontline";
-            if (isCloseTo(hex, "#ff0000")) cls = "ru";
-            else if (isCloseTo(hex, "#0000ff")) cls = "ua";
-            else if (isCloseTo(hex, "#e43b3b")) cls = "ru";    // אדום שלנו
-            else if (isCloseTo(hex, "#2b6de5")) cls = "ua";    // כחול שלנו
-            else if (hex === "#000000" || hex === "#333333" || hex === "#1f1f1f") cls = "frontline";
-
-            let targetLayer = frontlineLayer, color = COLORS.frontline;
-            if (cls === "ru"){ targetLayer = ruLayer; color = COLORS.ru; }
-            if (cls === "ua"){ targetLayer = uaLayer; color = COLORS.ua; }
-
-            const drawLine = (coords) =>
-              L.polyline(coords.map(c=>[c[1], c[0]]),
-                         {color, weight:WEIGHT, opacity:OPACITY}).addTo(targetLayer);
-
-            if(g.type==="LineString"){
-              drawLine(g.coordinates);
-            }else if(g.type==="MultiLineString"){
-              g.coordinates.forEach(drawLine);
-            }
-
-            try{
-              const tmp = L.geoJSON(f);
-              bounds = bounds ? bounds.extend(tmp.getBounds()) : tmp.getBounds();
-            }catch{}
-          });
-
-          if(bounds) map.fitBounds(bounds.pad(0.05));
-          statusEl.textContent = "נטען בהצלחה: " + new Date().toLocaleString();
-        })
-        .on('error', function(e){
-          statusEl.textContent = "שגיאה בטעינת KML: " + (e.error && e.error.message ? e.error.message : "");
-          console.error(e);
-        });
+    function classify(hex, folderCls){
+      // קודם לפי שם תיקייה, אחרת לפי צבע
+      if(folderCls) return folderCls;
+      const c = (hex||'').toLowerCase();
+      if(c==='#ff0000' || c==='#e43b3b') return 'ru';
+      if(c==='#0000ff' || c==='#2b6de5') return 'ua';
+      if(c==='#000000' || c==='#333333' || c==='#1f1f1f') return 'frontline';
+      return 'frontline';
     }
 
-    // הפעלה
     (async function(){
       try{
-        const styleMap = await buildStyleMap();
-        drawGeoJSONWithStyles(styleMap);
+        const meta = await parseKmlMeta();
+
+        // נטען שוב דרך omnivore כדי לקבל GeoJSON
+        omnivore.kml(KML_URL)
+          .on('ready', function(){
+            const gj = this.toGeoJSON();
+            let bounds = null;
+
+            (gj.features || []).forEach(f=>{
+              const g = f.geometry;
+              if(!g) return;
+              if(g.type==='Point' || g.type==='MultiPoint') return; // בלי נקודות
+
+              // נאתר את Placemark המקורי כדי לדעת styleUrl ושם תיקייה
+              // התאמה גסה: לפי bbox/coords ראשונים (מספיק טוב כאן)
+              const coordsKey = JSON.stringify(g.coordinates[0]?.slice(0,4) || g.coordinates.slice(0,2));
+              let styleUrl='', folderCls=null;
+
+              // מעבר על כל ה-placemarks מן ה-XML ומציאת התאמה מקורבת
+              // (הצמדה מושלמת דורשת יותר עבודה; לגבינו זה עובד מספיק)
+              meta.placemarkClass.forEach((val, node)=>{
+                const ls = node.querySelector('LineString coordinates, MultiGeometry LineString coordinates');
+                if(!ls) return;
+                const arr = ls.textContent.trim().split(/\s+/)
+                             .map(x=>x.split(',').map(Number))
+                             .slice(0,4);
+                const k = JSON.stringify(arr);
+                if(k===coordsKey){ styleUrl = val.styleUrl; folderCls = val.cls; }
+              });
+
+              const hex = meta.styleColor[styleUrl] || "#000000";
+              const cls = classify(hex, folderCls);
+
+              let target = frontlineLayer, color = COLORS.frontline;
+              if(cls==='ru'){ target = ruLayer; color = COLORS.ru; }
+              if(cls==='ua'){ target = uaLayer; color = COLORS.ua; }
+
+              const drawLine = (coords) =>
+                L.polyline(coords.map(c=>[c[1], c[0]]),
+                           {color, weight:WEIGHT, opacity:OPACITY}).addTo(target);
+
+              if(g.type==="LineString"){
+                drawLine(g.coordinates);
+              }else if(g.type==="MultiLineString"){
+                g.coordinates.forEach(drawLine);
+              }
+
+              try{
+                const tmp = L.geoJSON(f);
+                bounds = bounds ? bounds.extend(tmp.getBounds()) : tmp.getBounds();
+              }catch{}
+            });
+
+            if(bounds) map.fitBounds(bounds.pad(0.05));
+            statusEl.textContent = "עודכן: " + new Date().toLocaleString();
+          })
+          .on('error', e=>{
+            statusEl.textContent = "שגיאה בטעינת KML";
+            console.error(e);
+          });
+
       }catch(err){
-        statusEl.textContent = "שגיאה בקריאת ה-KML: " + err;
+        statusEl.textContent = "שגיאה בקריאת KML: " + err;
         console.error(err);
       }
     })();
