@@ -1,16 +1,71 @@
 {
+  "advances": [
+    {
+      "id": 101,
+      "type": "line",
+      "side": "ru",
+      "date": "2025-08-28",
+      "coords": [
+        [49.650, 36.900],
+        [49.700, 36.950],
+        [49.740, 37.020]
+      ]
+    },
+    {
+      "id": 102,
+      "type": "line",
+      "side": "ru",
+      "date": "2025-08-15",
+      "coords": [
+        [47.950, 35.100],
+        [48.020, 35.280],
+        [48.050, 35.420]
+      ]
+    },
+    {
+      "id": 201,
+      "type": "line",
+      "side": "ua",
+      "date": "2025-08-27",
+      "coords": [
+        [49.250, 37.500],
+        [49.320, 37.600],
+        [49.360, 37.720]
+      ]
+    },
+    {
+      "id": 202,
+      "type": "line",
+      "side": "ua",
+      "date": "2025-08-05",
+      "coords": [
+        [47.850, 35.600],
+        [47.900, 35.700],
+        [47.930, 35.820]
+      ]
+    }
+  ],
+
   "points": [
     {
       "id": 1,
-      "lat": 50.07,
-      "lng": 36.94,
-      "title": "וולצ׳נסק (חרקוב)",
-      "date": "2025-08-31",
+      "lat": 50.214,
+      "lng": 36.241,
+      "title": "תקיפה על מחסן תחמושת",
+      "date": "2025-08-29",
+      "side": "ru",
+      "summary": "פיצוצים משניים תועדו.",
+      "media": { "type": "youtube", "id": "dQw4w9WgXcQ" }
+    },
+    {
+      "id": 2,
+      "lat": 47.909,
+      "lng": 35.136,
+      "title": "פגיעה בגשר לוגיסטי",
+      "date": "2025-08-24",
       "side": "ua",
-      "front": "kharkiv",
-      "media": {"type":"link", "url":"https://example.com"},
-      "summary": "דוגמת נקודה (אפשר למחוק)."
+      "summary": "שיבוש תנועת אספקה לדרום.",
+      "media": { "type": "link", "url": "https://example.com" }
     }
-  ],
-  "frontlineKml": "https://www.google.com/maps/d/kml?mid=1lscRK6ehG0l2V-XvJ16nsyblMsQ&forcekml=1"
+  ]
 }
