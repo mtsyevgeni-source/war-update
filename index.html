@@ -1,160 +1,143 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="he">
 <head>
   <meta charset="UTF-8" />
   <title>Ukraine War Updates</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet-polylinedecorator@1.7.0/dist/leaflet.polylineDecorator.min.js"></script>
   <style>
-    #map {
-      width: 100%;
-      height: 100vh;
-      cursor: grab;
-    }
-    .leaflet-dragging #map {
-      cursor: grabbing;
-    }
+    html, body, #map { height: 100%; margin: 0; }
+    #map { cursor: grab; }
+    .leaflet-dragging #map { cursor: grabbing; }
   </style>
 </head>
 <body>
   <div id="map"></div>
-
   <script>
-    // אתחול המפה
-    const map = L.map("map", {
-      center: [48.4, 36.6],
+    // === Init map ===
+    const map = L.map('map', {
+      center: [48.6, 36.5],
       zoom: 7,
       zoomControl: true,
       scrollWheelZoom: true,
       wheelDebounceTime: 20,
       wheelPxPerZoomLevel: 120,
-      inertia: true,
+      inertia: true
     });
 
-    // שכבת בסיס
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
+      attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    // יצירת Panes (למנוע השתלטות שכבות על העכבר)
-    map.createPane("frontPane");
-    map.createPane("advancesPane");
-    map.createPane("pointsPane");
-    map.createPane("arrowsPane");
+    // === Panes to avoid blocking mouse ===
+    map.createPane('frontPane');     map.getPane('frontPane').style.zIndex = 410;
+    map.createPane('advPane');       map.getPane('advPane').style.zIndex   = 405;
+    map.createPane('pointsPane');    map.getPane('pointsPane').style.zIndex= 415;
+    map.createPane('updatesPane');   map.getPane('updatesPane').style.zIndex=420;
 
-    map.getPane("frontPane").style.zIndex = 410;
-    map.getPane("advancesPane").style.zIndex = 405;
-    map.getPane("pointsPane").style.zIndex = 415;
-    map.getPane("arrowsPane").style.zIndex = 420;
+    ['frontPane','advPane','pointsPane','updatesPane'].forEach(p=>{
+      map.getPane(p).style.pointerEvents = 'none';
+    });
 
-    map.getPane("frontPane").style.pointerEvents = "none";
-    map.getPane("advancesPane").style.pointerEvents = "none";
-    map.getPane("pointsPane").style.pointerEvents = "none";
-    map.getPane("arrowsPane").style.pointerEvents = "none";
-
-    // שכבת קו חזית (GeoJSON)
+    // === Layers ===
     const frontLayer = L.geoJSON(null, {
-      style: {
-        color: "#000",
-        weight: 4,
-        opacity: 0.95,
-        smoothFactor: 1,
-      },
-      pane: "frontPane",
+      pane: 'frontPane',
       interactive: false,
       bubblingMouseEvents: false,
+      style: { color:'#000', weight:4, opacity:0.95, smoothFactor:1 }
     });
 
-    fetch("advances2.json")
-      .then((res) => res.json())
-      .then((geo) => {
-        frontLayer.addData(geo).addTo(map);
-      });
-
-    // שכבת קווי התקדמות
     const advancesLayer = L.geoJSON(null, {
-      style: {
-        color: "#000",
-        weight: 1,
-        opacity: 0.35,
-        smoothFactor: 1.2,
-      },
-      pane: "advancesPane",
+      pane: 'advPane',
       interactive: false,
       bubblingMouseEvents: false,
+      style: { color:'#000', weight:1, opacity:0.35, smoothFactor:1.2 }
     });
 
-    fetch("advances2.json")
-      .then((res) => res.json())
-      .then((geo) => {
-        advancesLayer.addData(geo);
-      });
-
-    // שכבת נקודות (advances1.json)
     const pointsLayer = L.geoJSON(null, {
-      pointToLayer: (f, latlng) =>
-        L.circleMarker(latlng, {
-          radius: 3,
-          color: "#2b6cb0",
-          fillColor: "#2b6cb0",
-          fillOpacity: 0.85,
-          weight: 0.5,
-        }),
-      pane: "pointsPane",
+      pane: 'pointsPane',
       interactive: false,
       bubblingMouseEvents: false,
+      pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+        radius: 3, color:'#2b6cb0', fillColor:'#2b6cb0', fillOpacity:0.85, weight:0.5
+      })
     });
 
-    fetch("advances1.json")
-      .then((res) => res.json())
-      .then((geo) => {
-        pointsLayer.addData(geo);
-      });
+    const updatesLayer = L.layerGroup([], { pane:'updatesPane' });
 
-    // שכבת עדכונים (updates.json עם דגלים)
+    // === Load updates.json (flags) ===
     const icons = {
-      ru: L.icon({ iconUrl: "ru.png", iconSize: [24, 18] }),
-      ua: L.icon({ iconUrl: "ua.png", iconSize: [24, 18] }),
-      nu: L.icon({ iconUrl: "nu.png", iconSize: [24, 18] }),
+      ru: L.icon({ iconUrl:'ru.png', iconSize:[24,18] }),
+      ua: L.icon({ iconUrl:'ua.png', iconSize:[24,18] }),
+      nu: L.icon({ iconUrl:'nu.png', iconSize:[24,18] })
     };
 
-    const updatesLayer = L.layerGroup();
+    fetch('updates.json').then(r=>r.json()).then(data=>{
+      data.forEach(it=>{
+        const m = L.marker([it.lat, it.lng], {
+          icon: icons[it.side] || icons.nu, pane:'updatesPane'
+        }).bindPopup(`<b>${it.title}</b><br>${it.date}<br>${it.summary||''}`);
+        updatesLayer.addLayer(m);
+      });
+    });
 
-    fetch("updates.json")
-      .then((res) => res.json())
-      .then((data) => {
-        data.forEach((item) => {
-          const marker = L.marker([item.lat, item.lng], {
-            icon: icons[item.side] || icons.nu,
-          }).bindPopup(
-            `<b>${item.title}</b><br>${item.date}<br>${item.summary}`
-          );
-          updatesLayer.addLayer(marker);
-        });
+    // === Load points (advances1.json) — default OFF to reduce clutter ===
+    fetch('advances1.json').then(r=>r.json()).then(geo=> pointsLayer.addData(geo));
+
+    // === Load lines (advances2.json) ONCE, split: longest = front line; others = advances ===
+    function haversine(a, b){
+      const toRad = d => d*Math.PI/180;
+      const R = 6371e3;
+      const φ1 = toRad(a[1]), φ2 = toRad(b[1]);
+      const dφ = toRad(b[1]-a[1]), dλ = toRad(b[0]-a[0]);
+      const s = Math.sin(dφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(dλ/2)**2;
+      return 2*R*Math.asin(Math.sqrt(s));
+    }
+    function lineLength(coords){
+      let L = 0;
+      for(let i=1;i<coords.length;i++) L += haversine(coords[i-1], coords[i]);
+      return L;
+    }
+
+    fetch('advances2.json').then(r=>r.json()).then(geo=>{
+      // collect all LineStrings
+      const feats = (geo.features || []).filter(f=>f.geometry && f.geometry.type==='LineString');
+      if(!feats.length){
+        console.warn('No LineString features in advances2.json');
+        return;
+      }
+      // find longest line as "front"
+      let maxLen = -1, maxIdx = -1;
+      feats.forEach((f, i)=>{
+        const L = lineLength(f.geometry.coordinates);
+        if(L > maxLen){ maxLen = L; maxIdx = i; }
       });
 
-    // בקרת שכבות
+      const front = feats[maxIdx];
+      const others = feats.filter((_,i)=> i!==maxIdx);
+
+      frontLayer.addData(front).addTo(map);
+      advancesLayer.addData(others).addTo(map);
+
+      // fit bounds to front line for a good initial view
+      try { map.fitBounds(L.geoJSON(front).getBounds(), { padding:[20,20] }); } catch(e){}
+    });
+
+    // === Layer control ===
     const overlays = {
-      "קו חזית": frontLayer,
-      "קווי התקדמות": advancesLayer,
-      נקודות: pointsLayer,
-      "הצגת חיצים על הקווים": null, // נשאיר אופציה לחיצים בעתיד
-      "עדכונים": updatesLayer,
+      'קו חזית': frontLayer,
+      'קווי התקדמות': advancesLayer,
+      'נקודות': pointsLayer,
+      'עדכונים': updatesLayer
     };
+    L.control.layers(null, overlays, { collapsed:false }).addTo(map);
 
-    L.control.layers(null, overlays, { collapsed: false }).addTo(map);
-
-    // כברירת מחדל להציג את כל השכבות
-    frontLayer.addTo(map);
-    advancesLayer.addTo(map);
-    pointsLayer.addTo(map);
+    // default: show front & advances & updates; leave points OFF to keep המפה נקייה
     updatesLayer.addTo(map);
+    // pointsLayer intentionally NOT added by default
+
   </script>
 </body>
 </html>
