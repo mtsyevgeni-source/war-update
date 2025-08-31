@@ -1,143 +1,281 @@
-<!DOCTYPE html>
-<html lang="he">
+<!doctype html>
+<html lang="he" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <title>Ukraine War Updates</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <meta charset="utf-8" />
+  <title>מפת עדכונים – קו חזית וקווי התקדמות</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Leaflet -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
   <style>
     html, body, #map { height: 100%; margin: 0; }
-    #map { cursor: grab; }
-    .leaflet-dragging #map { cursor: grabbing; }
+    .panel {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 1000;
+      background: rgba(255,255,255,0.96);
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: 14px/1.25 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      min-width: 230px;
+      direction: rtl;
+    }
+    .panel h3 { margin: 0 0 6px; font-size: 15px; }
+    .row { margin: 6px 0; display: flex; align-items: center; gap: 8px; }
+    .row label { cursor: pointer; }
+    .small { color:#6b7280; font-size:12px }
+    .divider { height:1px; background:#eee; margin:8px 0 }
+    .badge { padding:2px 6px; border-radius:6px; background:#f3f4f6; font-size:12px }
+    .legend { display:flex; gap:10px; align-items:center; margin-top:4px }
+    .leg-line { width:24px; height:0; border-top:4px solid #000; box-shadow: 0 0 0 5px #fff; }
+    .leg-adv  { width:24px; height:0; border-top:2px solid #111; opacity:.7 }
   </style>
 </head>
 <body>
   <div id="map"></div>
+
+  <!-- לוח הבקרה -->
+  <div class="panel" id="panel">
+    <h3>שכבות</h3>
+    <div class="row"><input id="chkFront" type="checkbox" checked><label for="chkFront">קו חזית</label></div>
+    <div class="row"><input id="chkAdv" type="checkbox" checked><label for="chkAdv">קווי התקדמות</label></div>
+    <div class="legend">
+      <span class="leg-line"></span><span class="small">חזית</span>
+      <span class="leg-adv"></span><span class="small">התקדמות</span>
+    </div>
+
+    <div class="divider"></div>
+    <h3>גלגל עכבר</h3>
+    <div class="row"><input id="wheelEnable" type="checkbox" checked><label for="wheelEnable">פעיל</label></div>
+    <div class="row"><input id="zoomCursor"  type="checkbox" checked><label for="zoomCursor">זום סביב הסמן</label></div>
+    <div class="row"><input id="invertWheel" type="checkbox"><label for="invertWheel">הפוך כיוון</label></div>
+    <div class="divider"></div>
+    <div class="small">נכון לעכשיו: <span id="stamp" class="badge">—</span></div>
+  </div>
+
   <script>
-    // === Init map ===
+    // ===== מפה בסיס =====
     const map = L.map('map', {
-      center: [48.6, 36.5],
-      zoom: 7,
+      center: [48.6, 35.0], // מרכז אוקראינה
+      zoom: 6,
       zoomControl: true,
-      scrollWheelZoom: true,
-      wheelDebounceTime: 20,
-      wheelPxPerZoomLevel: 120,
-      inertia: true
+      worldCopyJump: true,
+      scrollWheelZoom: true
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap'
+      maxZoom: 18,
+      attribution: 'Leaflet | © OpenStreetMap'
     }).addTo(map);
 
-    // === Panes to avoid blocking mouse ===
-    map.createPane('frontPane');     map.getPane('frontPane').style.zIndex = 410;
-    map.createPane('advPane');       map.getPane('advPane').style.zIndex   = 405;
-    map.createPane('pointsPane');    map.getPane('pointsPane').style.zIndex= 415;
-    map.createPane('updatesPane');   map.getPane('updatesPane').style.zIndex=420;
+    // חותמת זמן בפאנל
+    document.getElementById('stamp').textContent =
+      new Date().toLocaleString('he-IL', { hour12:false });
 
-    ['frontPane','advPane','pointsPane','updatesPane'].forEach(p=>{
-      map.getPane(p).style.pointerEvents = 'none';
+    // ===== תיעדוף ציור: פיין לקו חזית כדי לעלות מעל הארות/קווי התקדמות =====
+    map.createPane('frontPane');  map.getPane('frontPane').style.zIndex = 650;
+    map.createPane('advPane');    map.getPane('advPane').style.zIndex   = 640;
+
+    // ===== שכבות: קו חזית (הילה+קו) וקווי התקדמות =====
+    const frontHalo = L.geoJSON(null, {
+      pane: 'frontPane',
+      interactive: false,
+      bubblingMouseEvents: false,
+      style: {
+        color: '#fff',           // הילה לבנה מתחת
+        weight: 11,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round',
+        smoothFactor: 1
+      }
     });
 
-    // === Layers ===
     const frontLayer = L.geoJSON(null, {
       pane: 'frontPane',
       interactive: false,
       bubblingMouseEvents: false,
-      style: { color:'#000', weight:4, opacity:0.95, smoothFactor:1 }
+      style: {
+        color: '#000',           // הקו עצמו
+        weight: 7,
+        opacity: 1,
+        lineCap: 'round',
+        lineJoin: 'round',
+        smoothFactor: 1
+      }
     });
 
     const advancesLayer = L.geoJSON(null, {
       pane: 'advPane',
       interactive: false,
       bubblingMouseEvents: false,
-      style: { color:'#000', weight:1, opacity:0.35, smoothFactor:1.2 }
-    });
-
-    const pointsLayer = L.geoJSON(null, {
-      pane: 'pointsPane',
-      interactive: false,
-      bubblingMouseEvents: false,
-      pointToLayer: (f, latlng) => L.circleMarker(latlng, {
-        radius: 3, color:'#2b6cb0', fillColor:'#2b6cb0', fillOpacity:0.85, weight:0.5
+      style: feature => ({
+        color: '#111',
+        weight: 2,
+        opacity: 0.75
       })
     });
 
-    const updatesLayer = L.layerGroup([], { pane:'updatesPane' });
+    // הוספה ראשונית (אפשר לכבות/להדליק מה־UI)
+    frontHalo.addTo(map);
+    frontLayer.addTo(map);
+    advancesLayer.addTo(map);
 
-    // === Load updates.json (flags) ===
-    const icons = {
-      ru: L.icon({ iconUrl:'ru.png', iconSize:[24,18] }),
-      ua: L.icon({ iconUrl:'ua.png', iconSize:[24,18] }),
-      nu: L.icon({ iconUrl:'nu.png', iconSize:[24,18] })
-    };
+    // ===== טעינת נתונים =====
+    // advances2.json = LineString רבים (כולל קו חזית)
+    // נזהה את ה־LineString הארוך ביותר כקו חזית, והשאר ייכנסו לקווי התקדמות.
+    fetch('advances2.json')
+      .then(r => r.json())
+      .then(fc => {
+        if (!fc || !fc.features) return;
 
-    fetch('updates.json').then(r=>r.json()).then(data=>{
-      data.forEach(it=>{
-        const m = L.marker([it.lat, it.lng], {
-          icon: icons[it.side] || icons.nu, pane:'updatesPane'
-        }).bindPopup(`<b>${it.title}</b><br>${it.date}<br>${it.summary||''}`);
-        updatesLayer.addLayer(m);
-      });
+        // חישוב אורך קו ב־km ע"י Haversine של Leaflet
+        const lineLenKm = coords => {
+          let d = 0;
+          for (let i = 1; i < coords.length; i++) {
+            const a = L.latLng(coords[i-1][1], coords[i-1][0]);
+            const b = L.latLng(coords[i][1],   coords[i][0]);
+            d += map.distance(a, b);
+          }
+          return d / 1000;
+        };
+
+        let maxLen = -1, frontFeature = null;
+        fc.features.forEach(f => {
+          if (f.geometry && f.geometry.type === 'LineString') {
+            const len = lineLenKm(f.geometry.coordinates);
+            if (len > maxLen) { maxLen = len; frontFeature = f; }
+          }
+        });
+
+        // הוסף קו חזית (הילה + קו)
+        if (frontFeature) {
+          frontHalo.addData(frontFeature);
+          frontLayer.addData(frontFeature);
+        }
+
+        // השאר – קווי התקדמות
+        const rest = {
+          type: 'FeatureCollection',
+          features: fc.features.filter(f => f !== frontFeature)
+        };
+        advancesLayer.addData(rest);
+
+        // התמקדות אוטומטית
+        try {
+          const b = L.geoJSON(fc).getBounds();
+          if (b.isValid()) map.fitBounds(b.pad(0.08));
+        } catch {}
+      })
+      .catch(console.error);
+
+    // advances1.json = נקודות (אם תרצה – כרגע לא מוצגות כברירת־מחדל)
+    // אם תרצה להציג נקודות: בטל הערה על הקטע הבא:
+    /*
+    const pointsLayer = L.geoJSON(null, {
+      pane: 'advPane',
+      pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+        radius: 3, color:'#1f77b4', fillColor:'#1f77b4', fillOpacity:0.7, weight:1
+      })
     });
+    fetch('advances1.json').then(r=>r.json()).then(j=>{
+      pointsLayer.addData(j);
+      // pointsLayer.addTo(map); // להציג נקודות – בטל הערה
+    });
+    */
 
-    // === Load points (advances1.json) — default OFF to reduce clutter ===
-    fetch('advances1.json').then(r=>r.json()).then(geo=> pointsLayer.addData(geo));
+    // ===== שליטה דרך ה־UI =====
+    const $ = id => document.getElementById(id);
 
-    // === Load lines (advances2.json) ONCE, split: longest = front line; others = advances ===
-    function haversine(a, b){
-      const toRad = d => d*Math.PI/180;
-      const R = 6371e3;
-      const φ1 = toRad(a[1]), φ2 = toRad(b[1]);
-      const dφ = toRad(b[1]-a[1]), dλ = toRad(b[0]-a[0]);
-      const s = Math.sin(dφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(dλ/2)**2;
-      return 2*R*Math.asin(Math.sqrt(s));
-    }
-    function lineLength(coords){
-      let L = 0;
-      for(let i=1;i<coords.length;i++) L += haversine(coords[i-1], coords[i]);
-      return L;
-    }
+    // שכבות
+    const chkFront = $('chkFront');
+    const chkAdv   = $('chkAdv');
 
-    fetch('advances2.json').then(r=>r.json()).then(geo=>{
-      // collect all LineStrings
-      const feats = (geo.features || []).filter(f=>f.geometry && f.geometry.type==='LineString');
-      if(!feats.length){
-        console.warn('No LineString features in advances2.json');
-        return;
+    const syncFront = () => {
+      if (chkFront.checked) {
+        map.addLayer(frontHalo);
+        map.addLayer(frontLayer);
+      } else {
+        map.removeLayer(frontLayer);
+        map.removeLayer(frontHalo);
       }
-      // find longest line as "front"
-      let maxLen = -1, maxIdx = -1;
-      feats.forEach((f, i)=>{
-        const L = lineLength(f.geometry.coordinates);
-        if(L > maxLen){ maxLen = L; maxIdx = i; }
-      });
-
-      const front = feats[maxIdx];
-      const others = feats.filter((_,i)=> i!==maxIdx);
-
-      frontLayer.addData(front).addTo(map);
-      advancesLayer.addData(others).addTo(map);
-
-      // fit bounds to front line for a good initial view
-      try { map.fitBounds(L.geoJSON(front).getBounds(), { padding:[20,20] }); } catch(e){}
-    });
-
-    // === Layer control ===
-    const overlays = {
-      'קו חזית': frontLayer,
-      'קווי התקדמות': advancesLayer,
-      'נקודות': pointsLayer,
-      'עדכונים': updatesLayer
     };
-    L.control.layers(null, overlays, { collapsed:false }).addTo(map);
+    const syncAdv = () => {
+      if (chkAdv.checked) map.addLayer(advancesLayer);
+      else map.removeLayer(advancesLayer);
+    };
+    chkFront.addEventListener('change', syncFront);
+    chkAdv.addEventListener('change',   syncAdv);
 
-    // default: show front & advances & updates; leave points OFF to keep המפה נקייה
-    updatesLayer.addTo(map);
-    // pointsLayer intentionally NOT added by default
+    // גלגל עכבר
+    const wheelEnable = $('wheelEnable');
+    const zoomCursor  = $('zoomCursor');
+    const invertWheel = $('invertWheel');
 
+    const applyWheel = () => {
+      // הפעלה/כיבוי
+      if (wheelEnable.checked) map.scrollWheelZoom.enable();
+      else map.scrollWheelZoom.disable();
+
+      // זום סביב הסמן או מרכז המסך
+      map.options.zoomSnap = 0; // זום חלק יותר
+      map.options.wheelPxPerZoomLevel = 60;
+      map.scrollWheelZoom._setZoomCursor(zoomCursor.checked ? true : false);
+      // טריק קטן: Leaflet תומך כברירת מחדל בזום סביב הסמן; כדי לאכוף:
+      map.scrollWheelZoom._zoom = function (e) {
+        const delta = map._limitZoom(map.getZoom() + (e.deltaY > 0 ? -1 : 1));
+        map.setZoomAround(e.clientX ? map.mouseEventToLatLng(e) : map.getCenter(), delta);
+      };
+
+      // היפוך כיוון
+      // נעזור ע"י listener שמחליף סימן
+      map._container.removeEventListener('wheel', invertHandler, { passive: false });
+      if (invertWheel.checked) {
+        map._container.addEventListener('wheel', invertHandler, { passive: false });
+      }
+    };
+
+    // מאזין שמחליף את כיוון הגלילה
+    function invertHandler(ev){
+      // למנוע מה־Leaflet לטפל כברירת מחדל
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!wheelEnable.checked) return;
+
+      // סימולציה של גלילה הפוכה
+      const fake = new WheelEvent('wheel', {
+        deltaY: -ev.deltaY, // היפוך
+        clientX: ev.clientX, clientY: ev.clientY
+      });
+      // מסירה זמנית כדי לא להיכנס ללולאה
+      map._container.removeEventListener('wheel', invertHandler, { passive:false });
+      map._container.dispatchEvent(fake);
+      map._container.addEventListener('wheel', invertHandler, { passive:false });
+    }
+
+    // קריאות ראשוניות
+    wheelEnable.addEventListener('change', applyWheel);
+    zoomCursor.addEventListener('change',  applyWheel);
+    invertWheel.addEventListener('change', applyWheel);
+    applyWheel();
+
+    // שמירה על פאנל מעל כל שכבה
+    L.DomEvent.disableClickPropagation(document.getElementById('panel'));
+    L.DomEvent.disableScrollPropagation(document.getElementById('panel'));
   </script>
 </body>
 </html>
