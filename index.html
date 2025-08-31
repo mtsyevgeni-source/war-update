@@ -4,33 +4,30 @@
   <meta charset="utf-8" />
   <title>מפת עדכונים</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  
-  <!-- Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
 
-  <!-- תוסף טעינת KML -->
-  <script src="https://unpkg.com/leaflet-kml@1.0.1/dist/leaflet-kml.min.js"></script>
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Omnivore (טעינת KML בצורה יציבה) -->
+  <script src="https://unpkg.com/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
 
   <style>
     html, body, #map { height: 100%; margin: 0; }
     .panel {
       position: absolute; top: 10px; left: 10px;
-      background: rgba(255,255,255,0.92); padding: 10px 12px; border-radius: 8px;
-      font-family: system-ui, Arial; font-size: 14px; line-height: 1.4;
-      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+      background: rgba(255,255,255,.92); padding: 10px 12px; border-radius: 8px;
+      font: 14px/1.4 system-ui, Arial; box-shadow: 0 2px 8px rgba(0,0,0,.08);
     }
     .panel h4 { margin: 0 0 6px; font-size: 14px; }
-    .panel label { user-select: none; }
+    .alert {
+      position: absolute; top: 10px; right: 10px;
+      background: #fff3cd; color:#6b5900; border:1px solid #ffe69c;
+      padding: 10px 12px; border-radius:8px; max-width: 340px; font:14px system-ui,Arial;
+      display:none;
+    }
   </style>
 </head>
 <body>
@@ -41,20 +38,23 @@
     <label><input id="wheel-enabled" type="checkbox" checked> פעיל</label><br>
     <label><input id="wheel-invert" type="checkbox"> הפוך כיוון</label><br>
     <label>רגישות:
-      <input id="wheel-sense" type="range" min="0.25" max="2.0" step="0.25" value="1">
+      <input id="wheel-sense" type="range" min="0.25" max="2" step="0.25" value="1">
       <span id="wheel-val">1.00×</span>
     </label>
   </div>
 
+  <div id="alert" class="alert"></div>
+
   <script>
-    // --- הגדרות בסיס ---
-    const INITIAL_CENTER = [48.9, 36.7];  // מרכז כללי
+    // ===== הגדרות =====
+    const INITIAL_CENTER = [48.9, 36.7];
     const INITIAL_ZOOM   = 7;
 
-    // נתיב לקובץ ה-KML שהעלית לריפו
-    const ADVANCES_KML_URL = 'advances.kml';
+    // שמות קבצים שנחפש בשורש הריפו (אותיות קטנות!):
+    const GEOJSON_FILE = 'advances.geojson';
+    const KML_FILE     = 'advances.kml';
 
-    // --- יצירת המפה ---
+    // ===== מפה =====
     const map = L.map('map', {
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
@@ -68,7 +68,7 @@
       maxZoom: 19
     }).addTo(map);
 
-    // --- בקרת גלגל עכבר ---
+    // שליטת גלגל
     const enabledEl = document.getElementById('wheel-enabled');
     const invertEl  = document.getElementById('wheel-invert');
     const senseEl   = document.getElementById('wheel-sense');
@@ -77,40 +77,112 @@
     enabledEl.addEventListener('change', () => {
       map.scrollWheelZoom[enabledEl.checked ? 'enable' : 'disable']();
     });
-
     invertEl.addEventListener('change', () => {
-      const invert = invertEl.checked ? -1 : 1;
-      map.options.zoomDelta = 1 * invert;
+      const inv = invertEl.checked ? -1 : 1;
+      map.options.zoomDelta = inv;
       map.options.zoomSnap  = 0;
     });
-
     senseEl.addEventListener('input', () => {
       const mult = parseFloat(senseEl.value);
       map.options.wheelPxPerZoomLevel = 60 / mult;
       valEl.textContent = mult.toFixed(2) + '×';
     });
 
-    // --- פונקציה לטעינת KML ---
-    function addKml(url) {
-      return fetch(url)
-        .then(r => {
-          if (!r.ok) throw new Error('KML not found: ' + url);
-          return r.text();
-        })
-        .then(txt => {
-          const kml = new DOMParser().parseFromString(txt, 'text/xml');
-          const layer = new L.KML(kml);
-          layer.addTo(map);
-          try { map.fitBounds(layer.getBounds(), { padding: [20,20] }); } catch(e){}
-          return layer;
-        })
-        .catch(err => console.warn(err.message));
+    const alertBox = document.getElementById('alert');
+    function showAlert(msg) {
+      alertBox.textContent = msg;
+      alertBox.style.display = 'block';
     }
 
-    // --- טעינת קווי ההתקדמות ---
-    addKml(ADVANCES_KML_URL);
+    // ===== עזר: בודק אם קובץ קיים =====
+    function exists(url) {
+      return fetch(url, { method: 'HEAD' }).then(r => r.ok).catch(() => false);
+    }
+
+    // ===== טעינת GeoJSON (מומלץ אם יש) =====
+    async function loadGeoJSON(url) {
+      const ok = await exists(url);
+      if (!ok) return false;
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      // סטייל בסיסי לקווים/חיצים (אפשר לשפר לפי תכונות)
+      const layer = L.geoJSON(data, {
+        style: f => {
+          // אם קיימת תכונה שמבדילה צבע (לדוגמה "side": "ru"/"ua"), אפשר לצבוע:
+          const side = (f.properties && (f.properties.side || f.properties.stroke)) || '';
+          let color = '#000000';
+          if (typeof side === 'string') {
+            if (side.toLowerCase().includes('red') || side.toLowerCase() === 'ru') color = '#d12a2a';
+            if (side.toLowerCase().includes('blue')|| side.toLowerCase() === 'ua') color = '#2878ff';
+          }
+          return { color, weight: 3, opacity: 0.9 };
+        },
+        // מציג חץ פשוט לסגמנטים (אופציונלי; יעבוד רק על קווים לא ענקיים)
+        onEachFeature: (feature, layer) => {
+          if (feature.geometry && feature.geometry.type === 'LineString') {
+            const coords = feature.geometry.coordinates;
+            if (coords.length >= 2) {
+              const a = coords[coords.length - 2], b = coords[coords.length - 1];
+              const p1 = L.latLng(a[1], a[0]), p2 = L.latLng(b[1], b[0]);
+              const head = L.polylineDecorator
+                ? L.polylineDecorator(L.polyline([p1, p2]), {
+                    patterns: [{ offset: '100%', repeat: 0, symbol: L.Symbol.arrowHead({ pixelSize: 10, pathOptions: { color: '#000' }})}]
+                  }).addTo(map)
+                : null;
+            }
+          }
+        }
+      }).addTo(map);
+
+      try { map.fitBounds(layer.getBounds(), { padding: [20,20] }); } catch(e){}
+      return true;
+    }
+
+    // ===== טעינת KML (באמצעות Omnivore) =====
+    async function loadKML(url) {
+      const ok = await exists(url);
+      if (!ok) return false;
+
+      return new Promise((resolve, reject) => {
+        const layer = omnivore.kml(url)
+          .on('ready', function() {
+            // צביעה כללית לקווים (Omnivore לא תמיד שומר צבעים מה-KML)
+            this.eachLayer(function(l) {
+              if (l.setStyle) {
+                l.setStyle({ color: '#000000', weight: 3, opacity: 0.9 });
+              }
+            });
+            this.addTo(map);
+            try { map.fitBounds(this.getBounds(), { padding: [20,20] }); } catch(e){}
+            resolve(true);
+          })
+          .on('error', function(e) {
+            console.warn('KML load error:', e);
+            reject(false);
+          });
+      }).catch(() => false);
+    }
+
+    // ===== רצף טעינה: קודם GeoJSON, אם אין – KML; אם לא – הודעה =====
+    (async function boot() {
+      const geoOk = await loadGeoJSON(GEOJSON_FILE);
+      if (geoOk) return;
+
+      const kmlOk = await loadKML(KML_FILE);
+      if (kmlOk) return;
+
+      showAlert('לא נמצא קובץ נתונים. ודא שקובץ בשם advances.geojson או advances.kml נמצא בתיקיית השורש של הריפו.');
+      console.warn('Neither advances.geojson nor advances.kml found at repo root.');
+    })();
   </script>
+
+  <!-- אופציונלי: PolylineDecorator (לחיצים) -->
+  <script src="https://unpkg.com/leaflet-polylinedecorator@1.7.0/dist/leaflet.polylineDecorator.min.js"></script>
 </body>
 </html>
+</html>
+
 
 
