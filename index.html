@@ -6,55 +6,46 @@
   <title>מפת עדכונים – קו חזית וקווי התקדמות</title>
 
   <!-- Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+
+  <!-- Omnivore (KML -> GeoJSON בדפדפן) -->
+  <script src="https://unpkg.com/@mapbox/leaflet-omnivore/leaflet-omnivore.min.js"></script>
 
   <style>
     html, body { height:100%; margin:0; }
     #map { height:100%; width:100%; }
-    .panel {
-      position: fixed; top:12px; right:12px; z-index:1000;
+
+    .panel{
+      position:fixed; top:12px; right:12px; z-index:1000;
       background:#ffffffea; border:1px solid #ddd; border-radius:10px;
-      padding:10px 12px; font-family: system-ui, Arial, sans-serif; font-size:14px;
-      box-shadow: 0 6px 16px rgba(0,0,0,.12);
-      min-width: 240px;
+      padding:10px 12px; font-family:system-ui,Arial,sans-serif; font-size:14px;
+      box-shadow:0 6px 16px rgba(0,0,0,.12); min-width:260px;
     }
-    .panel h4 { margin:0 0 6px; font-size:15px; }
-    .legend {
-      margin-top:6px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
-    }
-    .chip { display:inline-flex; align-items:center; gap:6px; }
-    .dot {
-      width:18px; height:4px; border-radius:2px; display:inline-block;
-    }
-    .dot.ru { background:#e43b3b; }    /* אדום */
-    .dot.ua { background:#2b6de5; }    /* כחול */
-    .dot.fl { background:#000; }       /* שחור */
-    .muted { color:#666; font-size:12px; }
-    .sep { height:1px; background:#eee; margin:8px 0; }
-    label { user-select:none; }
-    .slider-row { display:flex; align-items:center; gap:8px; }
-    .slider-row input[type="range"] { width:140px; }
+    .panel h4{ margin:0 0 6px; font-size:15px; }
+    .sep{ height:1px; background:#eee; margin:8px 0; }
+    .muted{ color:#666; font-size:12px; }
+    .legend{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
+    .chip{ display:inline-flex; align-items:center; gap:6px; }
+    .dot{ width:18px; height:4px; border-radius:2px; display:inline-block; }
+    .dot.fl{ background:#000; }  .dot.ru{ background:#e43b3b; }  .dot.ua{ background:#2b6de5; }
+    .slider-row{ display:flex; align-items:center; gap:8px; }
+    .slider-row input[type=range]{ width:140px; }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <!-- פאנל בקרה -->
   <div class="panel">
     <h4>שכבות</h4>
     <div>
-      <label><input type="checkbox" id="cbFront" checked> קו חזית</label><br/>
-      <label><input type="checkbox" id="cbRU" checked> התקדמות רוסית</label><br/>
+      <label><input type="checkbox" id="cbFront" checked> קו חזית</label><br>
+      <label><input type="checkbox" id="cbRU" checked> התקדמות רוסית</label><br>
       <label><input type="checkbox" id="cbUA" checked> התקדמות אוקראינית</label>
     </div>
 
@@ -66,7 +57,9 @@
       <span id="wheelVal">1.00×</span>
     </div>
     <label><input type="checkbox" id="invertZoom"> הפוך כיוון גלילה</label>
-    <div class="muted" id="status" style="margin-top:6px;">טוען נתונים…</div>
+
+    <div class="sep"></div>
+    <div class="muted" id="status">טוען advances.kml…</div>
 
     <div class="legend">
       <span class="chip"><span class="dot fl"></span> חזית</span>
@@ -76,160 +69,128 @@
   </div>
 
   <script>
-    // ========= הגדרות =========
-    // 1) החלף כאן לכתובת GeoJSON שלך (אפשר גם KML ממיר ל-GeoJSON).
-    //    דוגמה: "frontline.geojson" בתוך אותו רפוזיטורי,
-    //    או URL מלא לקובץ גלם (raw) ב-GitHub.
-    const DATA_URL = "frontline.geojson";
+    // ===== הגדרות קבועות =====
+    const KML_URL = "advances.kml";  // יש לך כבר את הקובץ הזה ברפוזיטורי
+    const COLORS = { frontline:"#000000", ru:"#e43b3b", ua:"#2b6de5" };
+    const WEIGHT = 3, OPACITY = 0.9;
 
-    // צבעים ועובי קווים
-    const COLORS = {
-      frontline: "#000000", // שחור
-      ru: "#e43b3b",        // אדום
-      ua: "#2b6de5"         // כחול
-    };
-    const WEIGHT = 3;
-    const OPACITY = 0.9;
-
-    // ========= מפה =========
+    // ===== יצירת המפה =====
     const map = L.map('map', {
-      center: [48.7, 36.8],
-      zoom: 7,
-      scrollWheelZoom: true,
-      wheelPxPerZoomLevel: 60,   // רגישות התחלתית
-      zoomSnap: 0.25,
-      zoomDelta: 0.25
+      center:[48.7, 36.8], zoom:7,
+      scrollWheelZoom:true, wheelPxPerZoomLevel:60,
+      zoomSnap:0.25, zoomDelta:0.25
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: 'Leaflet | © OpenStreetMap'
+      maxZoom:19, attribution:'Leaflet | © OpenStreetMap'
     }).addTo(map);
 
     // שליטה בגלגל
     const wheelSlider = document.getElementById('wheel');
     const wheelVal = document.getElementById('wheelVal');
-    wheelSlider.addEventListener('input', () => {
+    wheelSlider.addEventListener('input', ()=>{
       const v = parseFloat(wheelSlider.value);
-      wheelVal.textContent = v.toFixed(2) + "×";
-      // 60=רגיש; 120=פחות רגיש. נכפיל ביחס הופכי:
+      wheelVal.textContent = v.toFixed(2)+"×";
       map.options.wheelPxPerZoomLevel = 60 / v;
     });
     const invertBox = document.getElementById('invertZoom');
-    map.on('wheel', (e) => {
-      if (!invertBox.checked) return; // אם לא הפוך — כלום
-      // אם הפוך — נהפוך סימן (zoomIn<->zoomOut)
-      const center = map.getCenter();
-      if (e.originalEvent.deltaY < 0) {
-        map.zoomOut(undefined, {animate:false});
-      } else {
-        map.zoomIn(undefined, {animate:false});
-      }
-      map.panTo(center, {animate:false});
+    map.on('wheel',(e)=>{
+      if(!invertBox.checked) return;
+      const c = map.getCenter();
+      if(e.originalEvent.deltaY < 0) map.zoomOut(undefined,{animate:false});
+      else map.zoomIn(undefined,{animate:false});
+      map.panTo(c,{animate:false});
       e.originalEvent.preventDefault();
     }, {passive:false});
 
-    // ========= שכבות =========
+    // שכבות
     const frontlineLayer = L.layerGroup().addTo(map);
     const ruLayer = L.layerGroup().addTo(map);
     const uaLayer = L.layerGroup().addTo(map);
 
-    // חיבור לצ'קבוקסים
-    document.getElementById('cbFront').addEventListener('change', e => {
-      if (e.target.checked) frontlineLayer.addTo(map); else map.removeLayer(frontlineLayer);
+    document.getElementById('cbFront').addEventListener('change', e=>{
+      e.target.checked ? frontlineLayer.addTo(map) : map.removeLayer(frontlineLayer);
     });
-    document.getElementById('cbRU').addEventListener('change', e => {
-      if (e.target.checked) ruLayer.addTo(map); else map.removeLayer(ruLayer);
+    document.getElementById('cbRU').addEventListener('change', e=>{
+      e.target.checked ? ruLayer.addTo(map) : map.removeLayer(ruLayer);
     });
-    document.getElementById('cbUA').addEventListener('change', e => {
-      if (e.target.checked) uaLayer.addTo(map); else map.removeLayer(uaLayer);
+    document.getElementById('cbUA').addEventListener('change', e=>{
+      e.target.checked ? uaLayer.addTo(map) : map.removeLayer(uaLayer);
     });
 
-    // ========= עזר: סיווג תכונה לפי מאפיינים =========
-    function classifyFeature(props = {}) {
-      // ננסה כמה שיטות:
-      // 1) שדות צבע מהמרה של KML->GeoJSON (stroke / strokeColor)
+    // מסווג תכונה מתוך מאפייני KML
+    function classify(props={}){
       const stroke = (props.stroke || props.strokeColor || "").toLowerCase();
-      if (stroke.includes("#000")) return "frontline";
-      if (stroke.includes("ff0000") || stroke.includes("#ff0000") || stroke.includes("e43b3b")) return "ru";
-      if (stroke.includes("0000ff") || stroke.includes("#0000ff") || stroke.includes("2b6de5")) return "ua";
-
-      // 2) styleUrl מה-KML
       const styleUrl = (props.styleUrl || props.styleurl || "").toLowerCase();
-      if (styleUrl.includes("front") || styleUrl.includes("black")) return "frontline";
-      if (styleUrl.includes("red")) return "ru";
-      if (styleUrl.includes("blue")) return "ua";
-
-      // 3) לפי שם/תיאור
       const name = (props.name || props.title || "").toLowerCase();
       const desc = (props.description || "").toLowerCase();
-      if (name.includes("front") || name.includes("חזית") || desc.includes("front")) return "frontline";
-      if (name.includes("ru") || name.includes("russian") || name.includes("רוס")) return "ru";
-      if (name.includes("ua") || name.includes("ukrain") || name.includes("אוק")) return "ua";
 
-      // ברירת מחדל: קו חזית
+      // לפי צבע
+      if(stroke.includes("#000") || stroke.includes("000000")) return "frontline";
+      if(stroke.includes("ff0000") || stroke.includes("#ff0000") || stroke.includes("e43b3b")) return "ru";
+      if(stroke.includes("0000ff") || stroke.includes("#0000ff") || stroke.includes("2b6de5")) return "ua";
+
+      // לפי styleUrl
+      if(styleUrl.includes("front") || styleUrl.includes("black")) return "frontline";
+      if(styleUrl.includes("red")) return "ru";
+      if(styleUrl.includes("blue")) return "ua";
+
+      // לפי שם/תיאור
+      if(name.includes("front") || name.includes("חזית") || desc.includes("front")) return "frontline";
+      if(name.includes("ru") || name.includes("russian") || name.includes("רוס")) return "ru";
+      if(name.includes("ua") || name.includes("ukrain") || name.includes("אוק")) return "ua";
+
       return "frontline";
     }
 
-    // ציור קו (LineString/MultiLineString)
-    function drawLine(geom, targetLayer, color) {
-      if (geom.type === "LineString") {
-        L.polyline(geom.coordinates.map(c => [c[1], c[0]]), {
-          color, weight: WEIGHT, opacity: OPACITY
-        }).addTo(targetLayer);
-      } else if (geom.type === "MultiLineString") {
-        geom.coordinates.forEach(line => {
-          L.polyline(line.map(c => [c[1], c[0]]), {
-            color, weight: WEIGHT, opacity: OPACITY
-          }).addTo(targetLayer);
+    function drawLine(geom, layer, color){
+      if(geom.type==="LineString"){
+        L.polyline(geom.coordinates.map(c=>[c[1], c[0]]),
+          {color, weight:WEIGHT, opacity:OPACITY}).addTo(layer);
+      } else if(geom.type==="MultiLineString"){
+        geom.coordinates.forEach(line=>{
+          L.polyline(line.map(c=>[c[1], c[0]]),
+            {color, weight:WEIGHT, opacity:OPACITY}).addTo(layer);
         });
       }
     }
 
-    // ========= טעינת הנתונים =========
     const statusEl = document.getElementById('status');
 
-    fetch(DATA_URL)
-      .then(r => {
-        if (!r.ok) throw new Error("נכשלה טעינת הנתונים (" + r.status + ")");
-        return r.json();
-      })
-      .then(geo => {
-        // תמוך גם במבנה {features:[]} וגם באריזה בתוך Document/Placemark
-        const features = Array.isArray(geo.features) ? geo.features : [];
-
+    // טוען KML וממיר ל-GeoJSON דרך omnivore
+    const kmlLayer = omnivore.kml(KML_URL)
+      .on('ready', function(){
+        const gj = this.toGeoJSON();
         let bounds = null;
 
-        features.forEach(f => {
-          // לא מציגים נקודות (Markers)
-          if (!f.geometry || (f.geometry.type === "Point")) return;
+        (gj.features || []).forEach(f=>{
+          const g = f.geometry;
+          if(!g) return;
 
-          const cls = classifyFeature(f.properties || {});
-          let color = COLORS.frontline;
-          let layer = frontlineLayer;
-          if (cls === "ru") { color = COLORS.ru; layer = ruLayer; }
-          else if (cls === "ua") { color = COLORS.ua; layer = uaLayer; }
+          // לא מציגים נקודות
+          if(g.type==="Point" || g.type==="MultiPoint") return;
 
-          // צייר
-          drawLine(f.geometry, layer, color);
+          const cls = classify(f.properties||{});
+          let layer = frontlineLayer, color = COLORS.frontline;
+          if(cls==="ru"){ layer = ruLayer; color = COLORS.ru; }
+          else if(cls==="ua"){ layer = uaLayer; color = COLORS.ua; }
 
-          // גבולות לצפייה
-          try {
-            const g = L.geoJSON(f);
-            if (bounds) bounds = bounds.extend(g.getBounds());
-            else bounds = g.getBounds();
-          } catch {}
+          drawLine(g, layer, color);
+
+          try{
+            const tmp = L.geoJSON(f);
+            bounds = bounds ? bounds.extend(tmp.getBounds()) : tmp.getBounds();
+          }catch{}
         });
 
-        if (bounds) map.fitBounds(bounds.pad(0.05));
-        statusEl.textContent = "עודכן: " + new Date().toLocaleString();
+        if(bounds) map.fitBounds(bounds.pad(0.05));
+        statusEl.textContent = "נטען בהצלחה: " + new Date().toLocaleString();
       })
-      .catch(err => {
-        statusEl.textContent = "שגיאה בטעינה: " + err.message;
-        console.error(err);
+      .on('error', function(e){
+        statusEl.textContent = "שגיאה בטעינת KML: " + (e.error && e.error.message ? e.error.message : "");
+        console.error(e);
       });
   </script>
 </body>
 </html>
-
 
