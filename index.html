@@ -21,21 +21,21 @@
   <style>
     html, body, #map { height: 100%; margin: 0; }
     .leaflet-control-layers-expanded { direction: rtl; }
-    /* פנס לקו חזית כדי שיהיה תמיד מעל */
-    .pane-frontline { z-index: 650; pointer-events: none; }
+    /* שליטה בסדר ציור */
     .pane-polys     { z-index: 450; }
-    /* מקרא קטן */
+    .pane-frontline { z-index: 650; pointer-events: none; }
+
+    /* מקרא */
     .legend {
-      position: absolute; bottom: 14px; left: 14px; background: #fff;
-      padding: 8px 10px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,.3);
-      font: 13px/1.2 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,Helvetica,sans-serif;
-      direction: rtl;
+      position:absolute; bottom:14px; left:14px; background:#fff;
+      padding:8px 10px; border-radius:6px; box-shadow:0 1px 5px rgba(0,0,0,.3);
+      font:13px/1.2 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,Helvetica,sans-serif;
+      direction:rtl;
     }
     .legend .row { display:flex; align-items:center; gap:8px; margin:4px 0; }
     .legend .swatch { width:16px; height:12px; border:1px solid #0003; }
-    .swatch-ru { background:#e74c3c; }
-    .swatch-ua { background:#2e86de; }
-    .swatch-unk { background:#bdc3c7; }
+    .swatch-ru { background:#e74c3c; }    /* אדום */
+    .swatch-ua { background:#f1c40f; }    /* צהוב */
   </style>
 </head>
 <body>
@@ -43,11 +43,10 @@
   <div class="legend">
     <div class="row"><span class="swatch swatch-ru"></span> שטח בשליטה רוסית</div>
     <div class="row"><span class="swatch swatch-ua"></span> שטח בשליטה אוקראינית</div>
-    <div class="row"><span class="swatch swatch-unk"></span> אזור אחר/לא מסווג</div>
   </div>
 
   <script>
-    // === מפה בסיסית ===
+    // === אתחול מפה ===
     const map = L.map('map', {
       zoomSnap: 0.25,
       worldCopyJump: true,
@@ -59,55 +58,45 @@
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    // פנֵסים לשכבות כדי לשלוט בסדר הציור
-    const panePolys = map.createPane('pane-polys');
-    panePolys.classList.add('pane-polys');
+    // פנֵסים לשליטה בסדר הציור
+    map.createPane('pane-polys');
+    map.createPane('pane-frontline');
 
-    const paneFront = map.createPane('pane-frontline');
-    paneFront.classList.add('pane-frontline');
+    // === זיהוי "שדה שליטה" מפורש בלבד ===
+    const CONTROL_KEYS = ['control','controlled_by','side','status','owner','power','allegiance'];
 
-    // === פונקציית צביעה חכמה לפוליגונים ===
-    // מנסה לאתר שדה של שליטה: control / side / status / owner / power וכד'
-    function getControlValue(props) {
+    function readControl(props) {
       if (!props) return null;
-      const candidates = ['control','controlled_by','side','status','owner','power','allegiance'];
-      for (const key of candidates) {
-        if (props[key] != null) return String(props[key]).toLowerCase();
+      for (const k of CONTROL_KEYS) {
+        if (props[k] != null) return String(props[k]).toLowerCase().trim();
       }
-      // נסיון אחרון: לחפש מילים בטקסט של name/desc
-      const textKeys = ['name','title','description','desc','label'];
-      for (const k of textKeys) {
-        const v = props[k]; if (!v) continue;
-        const s = String(v).toLowerCase();
-        if (/(russia|russian|ru\b|occupied by russia|rus)/.test(s)) return 'russia';
-        if (/(ukraine|ukrainian|ua\b|held by ukraine)/.test(s)) return 'ukraine';
-      }
-      return null;
+      return null; // לא מנחשים משם/תיאור!
     }
 
-    function polygonStyle(feature) {
-      const v = getControlValue(feature.properties);
-      if (v === 'russia' || v === 'ru' || v === 'occupied' || v === 'russian') {
+    function styleByControl(ctrl) {
+      if (ctrl === 'russia' || ctrl === 'russian' || ctrl === 'ru' || ctrl === 'occupied') {
         return { pane:'pane-polys', color:'#b03a2e', weight:1, fillColor:'#e74c3c', fillOpacity:0.35 };
       }
-      if (v === 'ukraine' || v === 'ua' || v === 'ukrainian') {
-        return { pane:'pane-polys', color:'#1b4f72', weight:1, fillColor:'#2e86de', fillOpacity:0.30 };
+      if (ctrl === 'ukraine' || ctrl === 'ukrainian' || ctrl === 'ua' || ctrl === 'liberated') {
+        return { pane:'pane-polys', color:'#b7950b', weight:1, fillColor:'#f1c40f', fillOpacity:0.30 };
       }
-      // ברירת מחדל אם לא הצלחנו לזהות
-      return { pane:'pane-polys', color:'#7f8c8d', weight:1, dashArray:'3,3', fillColor:'#bdc3c7', fillOpacity:0.25 };
+      return null; // לא מציירים אם לא ברור
     }
 
-    // === טעינת שכבת השטחים (פוליגונים) ===
+    // שכבת שטחים: מסננים features שאין להם שדה שליטה ברור
     const territoriesLayer = L.geoJSON(null, {
-      style: polygonStyle,
+      filter: (feat) => {
+        const ctrl = readControl(feat.properties);
+        return !!styleByControl(ctrl);
+      },
+      style: (feat) => styleByControl(readControl(feat.properties)),
       onEachFeature: (feat, layer) => {
         const p = feat.properties || {};
-        // פופאפ קצר לעיון
+        const ctrl = readControl(p);
         const lines = [];
         if (p.name) lines.push(`<b>${p.name}</b>`);
-        const ctrl = getControlValue(p);
-        if (ctrl) lines.push(`Control: ${ctrl}`);
-        layer.bindPopup(lines.join('<br/>') || 'Territory');
+        if (ctrl)   lines.push(`Control: ${ctrl}`);
+        if (lines.length) layer.bindPopup(lines.join('<br/>'));
       },
       pane: 'pane-polys'
     }).addTo(map);
@@ -116,10 +105,9 @@
       .then(r => r.json())
       .then(data => {
         territoriesLayer.addData(data);
-        // לוג דיבוג – יראה את שדות ה-properties של הפיצ'ר הראשון
         try {
-          const f = (data.features && data.features[0]) || null;
-          if (f) console.log('Sample territory properties:', f.properties);
+          const f = (data.features && data.features.find(ft => styleByControl(readControl(ft.properties)))) || null;
+          if (f) console.log('Sample territory with control:', f.properties);
         } catch(e){}
       })
       .catch(err => {
@@ -127,7 +115,7 @@
         alert('שגיאה בטעינת territories.json');
       });
 
-    // === טעינת קו החזית (LineString) ===
+    // קו חזית מעל הכול
     const frontlineLayer = L.geoJSON(null, {
       style: { pane:'pane-frontline', color:'#ff2d20', weight:3, opacity:0.95 },
       pane: 'pane-frontline'
@@ -141,15 +129,12 @@
         alert('שגיאה בטעינת frontline.json');
       });
 
-    // === שכבות/בקרות ===
-    const overlays = {
+    // בקרת שכבות
+    L.control.layers({ 'OpenStreetMap': osm }, {
       'שטחי שליטה': territoriesLayer,
       'קו חזית': frontlineLayer
-      // לא טוענים/מראים את שכבת הנקודות בכוונה כדי שלא תסתיר
-    };
-    L.control.layers({ 'OpenStreetMap': osm }, overlays, { collapsed: false }).addTo(map);
+    }, { collapsed: false }).addTo(map);
 
-    // כפתור זום לאוקראינה
     L.control.scale({ imperial:false }).addTo(map);
   </script>
 </body>
