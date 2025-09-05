@@ -1,130 +1,71 @@
-<!doctype html>
-<html lang="he" dir="rtl">
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ukraine War Updates – מפה</title>
-
-  <!-- Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
-
-  <!-- KML -> GeoJSON -->
-  <script src="https://unpkg.com/@tmcw/togeojson@5.8.0/dist/togeojson.umd.js"></script>
-
+  <title>Ukraine War Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
   <style>
-    html, body, #map { height: 100%; margin: 0; }
-    .leaflet-control-layers-expanded {
-      direction: rtl;
-    }
+    #map { height: 100vh; }
+    .legend { background: white; padding: 8px; line-height: 1.4em; }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    // === יצירת מפה עם שליטה נוחה בגלגל העכבר ===
-    const map = L.map('map', {
-      center: [48.7, 35.0],   // אוקראינה מרכז-מזרח
-      zoom: 6,
-      scrollWheelZoom: true,
-      wheelDebounceTime: 20,      // גלגל מגיב מהר אך נשלט
-      wheelPxPerZoomLevel: 80,    // פחות "קופצני"
-      doubleClickZoom: true
-    });
+    // יצירת מפה בסיסית
+    var map = L.map('map').setView([48.5, 37.5], 6);
 
-    // בסיס OSM
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: '&copy; OpenStreetMap'
+    // שכבת רקע
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // בורר שכבות
-    const layersControl = L.control.layers(
-      { 'מפת בסיס (OSM)': osm },   // base layers
-      {},                           // overlays (נוסיף לאחר טעינת KML)
-      { collapsed: false }
-    ).addTo(map);
+    // טעינת קובץ השטחים (פוליגונים)
+    fetch('territories.json')
+      .then(res => res.json())
+      .then(data => {
+        L.geoJSON(data, {
+          style: { color: "#666", weight: 1, fillOpacity: 0.3 }
+        }).addTo(map).bindPopup("Territory");
+      });
 
-    // קווי קו-חזית/התקדמות – עיצוב שחור עבה
-    const lineStyle = {
-      color: '#000000',
-      weight: 4,
-      opacity: 1
-    };
+    // טעינת קובץ קווי החזית (LineString)
+    fetch('frontline.json')
+      .then(res => res.json())
+      .then(data => {
+        L.geoJSON(data, {
+          style: { color: "red", weight: 3 }
+        }).addTo(map).bindPopup("Frontline");
+      });
 
-    // נקודות – כבויות כברירת-מחדל
-    const pointStyle = {
-      radius: 4,
-      color: '#1E88E5',
-      weight: 1,
-      fillColor: '#42A5F5',
-      fillOpacity: 0.9
-    };
-
-    // === טעינת ה־KML, פיצול לשכבות, ותוספת לבורר ===
-    (async () => {
-      try {
-        const resp = await fetch('mymap.kml', { cache: 'no-cache' });
-        if (!resp.ok) throw new Error('KML load failed');
-        const kmlText = await resp.text();
-
-        // לוודא שזה באמת KML ולא KMZ/קישור ריק
-        if (!kmlText.trim().startsWith('<?xml')) {
-          throw new Error('Not a raw KML file (XML). Make sure it is .kml, not .kmz, and not a NetworkLink.');
-        }
-
-        const xml = new DOMParser().parseFromString(kmlText, 'text/xml');
-        const gj = toGeoJSON.kml(xml);
-        const feats = (gj && gj.features) ? gj.features : [];
-
-        // פיצול: קווים/שטחים לעומת נקודות
-        const lineFeats  = feats.filter(f => f.geometry && f.geometry.type !== 'Point');
-        const pointFeats = feats.filter(f => f.geometry && f.geometry.type === 'Point');
-
-        // שכבת קווים
-        const linesLayer = L.geoJSON({ type: 'FeatureCollection', features: lineFeats }, {
-          style: lineStyle,
-          onEachFeature: (f, layer) => {
-            const name = f.properties && (f.properties.name || f.properties.Name);
-            if (name) layer.bindPopup(name);
+    // טעינת קובץ היחידות (נקודות)
+    fetch('units.json')
+      .then(res => res.json())
+      .then(data => {
+        L.geoJSON(data, {
+          pointToLayer: (feature, latlng) => {
+            return L.circleMarker(latlng, {
+              radius: 5,
+              fillColor: "blue",
+              color: "#000",
+              weight: 1,
+              opacity: 1,
+              fillOpacity: 0.8
+            });
+          },
+          onEachFeature: (feature, layer) => {
+            if (feature.properties && feature.properties.name) {
+              layer.bindPopup(feature.properties.name);
+            }
           }
         }).addTo(map);
-
-        // שכבת נקודות (לא מוסיפים ל-map כברירת-מחדל)
-        const pointsLayer = L.geoJSON({ type: 'FeatureCollection', features: pointFeats }, {
-          pointToLayer: (f, latlng) => L.circleMarker(latlng, pointStyle),
-          onEachFeature: (f, layer) => {
-            const name = f.properties && (f.properties.name || f.properties.Name) || 'Point';
-            layer.bindPopup(name);
-          }
-        });
-
-        // הוספה לבורר שכבות
-        layersControl.addOverlay(linesLayer, 'קווי חזית/התקדמות (KML)');
-        layersControl.addOverlay(pointsLayer, 'נקודות (KML)');
-
-        // התמקדות – אם יש קווים, התאם תצוגה אליהם; אחרת אל כל ה־KML
-        const fitLayer = linesLayer.getLayers().length ? linesLayer : (pointsLayer.getLayers().length ? pointsLayer : null);
-        if (fitLayer) map.fitBounds(fitLayer.getBounds().pad(0.1));
-
-      } catch (err) {
-        console.error(err);
-        alert('טעינת mymap.kml נכשלה או שהקובץ אינו KML גולמי. ודא שזה קובץ ‎.kml‎ רגיל ולא ‎.kmz‎/NetworkLink.');
-      }
-    })();
-
-    // סרגל קנה מידה
-    L.control.scale({ imperial: false }).addTo(map);
+      });
   </script>
 </body>
 </html>
