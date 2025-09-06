@@ -1,16 +1,7 @@
 {
   "updates": [
-    {
-      "date": "2025-09-04",
-      "file": "update 4-9-25.json"
-    },
-    {
-      "date": "2025-09-05",
-      "file": "update 5-9-25.json"
-    },
-    {
-      "date": "2025-09-06",
-      "file": "update 6-9-25.json"
-    }
+    { "date": "2025-09-04", "file": "update 4-9-25.json" },
+    { "date": "2025-09-05", "file": "update 5-9-25.json" },
+    { "date": "2025-09-06", "file": "update 6-9-25.json" }
   ]
 }
