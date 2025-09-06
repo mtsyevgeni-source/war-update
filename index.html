@@ -1,116 +1,201 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="he" dir="rtl">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1"
+  />
   <title>מפת לחימה – דפדוף עדכונים</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <!-- Leaflet CDN -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
   <style>
-    #map {
-      width: 100%;
-      height: 100vh;
+    html, body { height: 100%; margin: 0; font-family: system-ui, Arial, sans-serif; }
+    #topbar {
+      position: fixed; inset-inline: 0; top: 0; z-index: 1000;
+      display: flex; gap: .5rem; align-items: center; justify-content: center;
+      padding: .6rem; background: #ffffffd9; backdrop-filter: blur(4px);
+      border-bottom: 1px solid #ddd;
     }
-    .controls {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 1000;
-      background: rgba(255, 255, 255, 0.9);
-      padding: 5px 10px;
-      border-radius: 5px;
-      font-family: Arial, sans-serif;
-      display: flex;
-      gap: 10px;
-      align-items: center;
+    #dateLabel { font-weight: 600; min-width: 9ch; text-align: center; }
+    .btn {
+      border: 1px solid #ccc; background: #fff; padding: .35rem .6rem; border-radius: 6px; cursor: pointer;
     }
-    button {
-      padding: 5px 10px;
-      cursor: pointer;
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    #map { position: absolute; inset: 50px 0 0 0; }
+    .legend {
+      position: fixed; bottom: 12px; inset-inline-start: 12px;
+      background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: .35rem .5rem; font-size: 12px;
     }
+    .chip { display: inline-flex; align-items: center; gap: .4rem; margin-inline-end: .6rem }
+    .box { width: 12px; height: 12px; border: 1px solid #333 }
   </style>
 </head>
 <body>
-  <div class="controls">
-    <button id="prev">⬅ הקודם</button>
-    <span id="date"></span>
-    <button id="next">➡ הבא</button>
+  <div id="topbar">
+    <button id="prevBtn" class="btn" aria-label="הקודם">⬅︎ הקודם</button>
+    <span id="dateLabel">—</span>
+    <button id="nextBtn" class="btn" aria-label="הבא">הבא ➡︎</button>
   </div>
-  <div id="map"></div>
+  <div id="map" role="region" aria-label="מפת עדכוני חזית"></div>
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <div class="legend">
+    <span class="chip"><span class="box" style="background:#000;opacity:.15"></span>שטח עדכון (פוליגון)</span>
+    <span class="chip"><span class="box" style="background:#fff;border-color:#d33"></span>קו חזית (אדום)</span>
+  </div>
+
   <script>
-    const map = L.map('map').setView([48.5, 37.5], 7);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    let updates = [];
+    // --- משתנים גלובליים קלים ---
+    let map, frontlineLayer = null, updateLayer = null;
+    let updatesArray = [];   // נטען מתוך updates.json
     let currentIndex = 0;
-    let currentLayer = null;
 
-    // טוען את רשימת העדכונים
-    fetch('updates.json')
-      .then(res => res.json())
-      .then(data => {
-        updates = data.updates;
-        if (updates.length === 0) {
-          alert("לא נמצאו עדכונים. ודא שקיים updates.json תקין.");
-          return;
-        }
-        loadUpdate(0);
-      })
-      .catch(err => {
-        console.error("שגיאה בטעינת updates.json:", err);
-      });
+    // --- אתחול מפה ---
+    function initMap() {
+      map = L.map('map', {
+        zoomControl: true, preferCanvas: true
+      }).setView([48.5, 36.5], 6); // איזור אוקראינה
 
-    function loadUpdate(index) {
-      if (index < 0 || index >= updates.length) return;
-
-      currentIndex = index;
-      const update = updates[index];
-
-      document.getElementById('date').textContent = update.date;
-
-      fetch(update.file)
-        .then(res => res.json())
-        .then(geojson => {
-          if (currentLayer) {
-            map.removeLayer(currentLayer);
-          }
-          currentLayer = L.geoJSON(geojson, {
-            style: feature => {
-              if (feature.properties && feature.properties.role === "frontline") {
-                return { color: "red", weight: 3 };
-              }
-              return { color: "gray", weight: 1, fillOpacity: 0.3 };
-            }
-          }).addTo(map);
-
-          map.fitBounds(currentLayer.getBounds());
-        })
-        .catch(err => {
-          console.error("שגיאה בטעינת קובץ העדכון:", err);
-        });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '&copy; OSM'
+      }).addTo(map);
     }
 
-    document.getElementById('prev').addEventListener('click', () => {
-      if (currentIndex > 0) {
-        loadUpdate(currentIndex - 1);
-      }
-    });
+    // --- טעינת קו חזית (מקובץ או מאובייקט GeoJSON) ---
+    async function loadFrontline(src) {
+      try {
+        const data = (typeof src === 'string')
+          ? await fetch(src, { cache: 'no-cache' }).then(r => r.json())
+          : src;
 
-    document.getElementById('next').addEventListener('click', () => {
-      if (currentIndex < updates.length - 1) {
-        loadUpdate(currentIndex + 1);
+        if (frontlineLayer) map.removeLayer(frontlineLayer);
+        frontlineLayer = L.geoJSON(data, {
+          style: { color: '#d33', weight: 3 }
+        }).addTo(map);
+      } catch (e) {
+        console.error('Frontline load error:', e);
       }
-    });
+    }
+
+    // --- שרטוט שכבת עדכון (כל מה שאינו frontline) ---
+    function drawUpdateFeatures(geojson) {
+      try {
+        if (updateLayer) { map.removeLayer(updateLayer); updateLayer = null; }
+
+        const others = {
+          type: 'FeatureCollection',
+          features: (geojson.features || []).filter(f => {
+            const role = (f.properties && (f.properties.role || '')).toLowerCase();
+            return role !== 'frontline';
+          })
+        };
+
+        updateLayer = L.geoJSON(others, {
+          style: f => {
+            const t = f.geometry && f.geometry.type;
+            if (t === 'Polygon' || t === 'MultiPolygon') {
+              return { color: '#333', weight: 1, fillColor: '#000', fillOpacity: 0.15 };
+            }
+            // LineString/מורכב
+            return { color: '#333', weight: 2, dashArray: '4 4' };
+          }
+        }).addTo(map);
+
+      } catch (e) {
+        console.error('Update layer error:', e);
+      }
+    }
+
+    // --- טעינת עדכון לפי קובץ ---
+    async function loadUpdateFile(filename) {
+      try {
+        const gj = await fetch(filename, { cache: 'no-cache' }).then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        });
+
+        // האם יש בעדכון קו חזית?
+        const front = (gj.features || []).find(f =>
+          (f.properties && (f.properties.role || '')).toLowerCase() === 'frontline'
+        );
+
+        if (front) {
+          await loadFrontline({ type: 'FeatureCollection', features: [front] });
+        } else {
+          // אין frontline בעדכון – נשאיר הבסיסי
+        }
+
+        drawUpdateFeatures(gj);
+
+      } catch (e) {
+        console.error('Load update error:', e);
+        alert('טעינת העדכון נכשלה: ' + filename);
+      }
+    }
+
+    // --- ניווט בין עדכונים ---
+    function updateNavState() {
+      const atStart = currentIndex <= 0;
+      const atEnd   = currentIndex >= updatesArray.length - 1;
+      document.getElementById('prevBtn').disabled = atStart;
+      document.getElementById('nextBtn').disabled = atEnd;
+
+      const label = document.getElementById('dateLabel');
+      if (updatesArray[currentIndex]) {
+        label.textContent = updatesArray[currentIndex].date || '—';
+      } else {
+        label.textContent = '—';
+      }
+    }
+
+    async function showUpdateByIndex(i) {
+      if (!updatesArray.length) return;
+      currentIndex = Math.max(0, Math.min(i, updatesArray.length - 1));
+      updateNavState();
+      const item = updatesArray[currentIndex];
+      await loadUpdateFile(item.file);
+    }
+
+    // --- אתחול כולל ---
+    (async function main() {
+      initMap();
+
+      // 1) טען את קו החזית הבסיסי תמיד
+      await loadFrontline('frontline.json');
+
+      // 2) טען רשימת עדכונים
+      try {
+        const payload = await fetch('updates.json', { cache: 'no-cache' }).then(r => r.json());
+        updatesArray = Array.isArray(payload.updates) ? payload.updates : [];
+        if (!updatesArray.length) {
+          alert('לא נטענו עדכונים. ודא שקיים updates.json תקין.');
+        }
+      } catch (e) {
+        console.error('updates.json error', e);
+        alert('לא נטענו עדכונים. ודא שקיים updates.json תקין.');
+      }
+
+      // 3) הצג עדכון ראשון אם קיים
+      updateNavState();
+      if (updatesArray.length) await showUpdateByIndex(0);
+
+      // אירועי חיצים
+      document.getElementById('prevBtn').addEventListener('click', () => showUpdateByIndex(currentIndex - 1));
+      document.getElementById('nextBtn').addEventListener('click', () => showUpdateByIndex(currentIndex + 1));
+    })();
   </script>
 </body>
 </html>
-
 
