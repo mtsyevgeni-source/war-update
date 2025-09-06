@@ -1,168 +1,127 @@
-<!doctype html>
-<html lang="he" dir="rtl">
+<!DOCTYPE html>
+<html lang="he">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
   <title>מפת לחימה – דפדוף עדכונים</title>
-
-  <!-- Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- טעינת Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <style>
-    html, body, #map { height: 100%; margin: 0; }
-    .toolbar {
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: Arial, sans-serif;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    #controls {
       position: absolute;
-      top: 10px; left: 50%;
+      top: 10px;
+      left: 50%;
       transform: translateX(-50%);
-      background: rgba(255,255,255,0.9);
-      padding: 6px 10px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,.15);
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
-      display: flex; gap: 8px; align-items: center;
       z-index: 1000;
-      direction: rtl;
+      background: rgba(255,255,255,0.9);
+      padding: 6px 12px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    .toolbar button {
-      border: 1px solid #ccc;
-      background: #fff;
-      border-radius: 6px;
-      padding: 4px 8px;
+    button {
       cursor: pointer;
-      font-size: 14px;
     }
-    .toolbar button:disabled { opacity: .5; cursor: default; }
-    .date-label { font-weight: 600; min-width: 8ch; text-align: center; }
-    .legend {
-      position:absolute; bottom:12px; left:12px;
-      background: rgba(255,255,255,.9);
-      padding:6px 8px; border-radius:8px; font:13px/1.2 system-ui;
-      box-shadow:0 2px 8px rgba(0,0,0,.1);
-    }
-    .legend .key { display:flex; align-items:center; gap:6px; margin:3px 0; }
-    .chip { width:16px; height:3px; background:#d33; }
   </style>
 </head>
 <body>
   <div id="map"></div>
-
-  <div class="toolbar" aria-label="דפדוף בין עדכונים">
-    <button id="prevBtn" title="יום קודם (חץ שמאל)">◀</button>
-    <span class="date-label" id="dateLabel">—</span>
-    <button id="nextBtn" title="יום הבא (חץ ימין)">▶</button>
-  </div>
-
-  <div class="legend">
-    <div class="key"><span class="chip"></span> קו חזית</div>
+  <div id="controls">
+    <button id="prevBtn">⟵ יום קודם</button>
+    <span id="dateLabel">---</span>
+    <button id="nextBtn">יום הבא ⟶</button>
   </div>
 
   <script>
-    // מפה בסיסית
-    const map = L.map('map', { zoomControl: true }).setView([48.5, 36.7], 6);
-    L.tileLayer(
-      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      { attribution: '&copy; OpenStreetMap contributors' }
-    ).addTo(map);
+    const map = L.map('map').setView([48.5, 37.5], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
 
-    // שכבת קו חזית (נטען/נחליף בכל דפדוף)
-    let frontlineLayer = null;
+    const frontlineLayer = L.geoJSON(null, {
+      style: { color: 'red', weight: 2 }
+    }).addTo(map);
 
-    // נתוני העדכונים (נטען את updates.json מהריפו)
-    let UPDATES = [];
-    let idx = 0;
+    let updates = [];
+    let currentIndex = -1;
 
-    const dateLabel = document.getElementById('dateLabel');
-    const prevBtn   = document.getElementById('prevBtn');
-    const nextBtn   = document.getElementById('nextBtn');
-
-    function setButtonsState() {
-      prevBtn.disabled = (idx <= 0);
-      nextBtn.disabled = (idx >= UPDATES.length - 1);
-    }
-
-    async function loadFrontlineFor(i) {
-      if (!UPDATES[i]) return;
-      idx = i;
-      setButtonsState();
-
-      const rec = UPDATES[i];
-      dateLabel.textContent = rec.date;
-
-      // נקה שכבה קודמת
-      if (frontlineLayer) {
-        map.removeLayer(frontlineLayer);
-        frontlineLayer = null;
-      }
-
-      // קודד נתיב עם רווחים
-      const url = encodeURI(rec.frontline);
-
+    async function fetchUpdates() {
       try {
-        const gj = await fetch(url).then(r => {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        });
+        const res = await fetch('updates.json?ts=' + Date.now());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
 
-        frontlineLayer = L.geoJSON(gj, {
-          style: feature => {
-            // אם זה LineString – צבע אדום
-            if (feature.geometry && feature.geometry.type === 'LineString') {
-              return { color: '#d33', weight: 3, opacity: 0.95 };
-            }
-            // פוליגון (אם בטעות נשאר): קו אדום, מילוי שקוף
-            if (feature.geometry && feature.geometry.type === 'Polygon') {
-              return { color: '#d33', weight: 2, fillOpacity: 0 };
-            }
-            return { color: '#d33', weight: 3 };
-          }
-        }).addTo(map);
+        if (!data || !Array.isArray(data.updates) || data.updates.length === 0) {
+          throw new Error('updates.json ריק או לא תקין');
+        }
 
-        // התאמת תצוגה
-        try { map.fitBounds(frontlineLayer.getBounds(), { padding:[20,20] }); } catch(e){}
-      } catch (e) {
-        console.error('שגיאה בטעינת הקובץ:', url, e);
-        alert('אירעה שגיאה בטעינת ' + rec.frontline);
+        updates = data.updates;
+        currentIndex = updates.length - 1; // התחל מהעדכון האחרון
+        await loadUpdate(currentIndex);
+      } catch (err) {
+        console.error(err);
+        alert('לא נטענו עדכונים. ודא שקיים updates.json תקין, ונסה רענון קשיח (Ctrl+F5).');
       }
     }
 
-    // טעינת רשימת העדכונים
-    fetch('updates.json')
-      .then(r => r.json())
-      .then(data => {
-        UPDATES = (data.updates || []).slice();
+    async function loadUpdate(index) {
+      const entry = updates[index];
+      const filename =
+        entry.file ||
+        (entry.files && entry.files.frontline) ||
+        null;
 
-        // מיון לפי תאריך אם צריך (YYYY-MM-DD) – רק למקרה
-        UPDATES.sort((a,b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+      if (!filename) {
+        alert('לא נמצא שם קובץ לעדכון');
+        return;
+      }
 
-        if (!UPDATES.length) throw new Error('אין עדכונים');
+      const url = encodeURI(filename) + '?ts=' + Date.now();
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const geo = await res.json();
 
-        // התחל מהאחרון
-        loadFrontlineFor(UPDATES.length - 1);
-      })
-      .catch(err => {
+        frontlineLayer.clearLayers();
+        L.geoJSON(geo, { style: { color: 'red', weight: 2 } })
+          .addTo(frontlineLayer);
+
+        document.getElementById('dateLabel').textContent = entry.date;
+      } catch (err) {
         console.error(err);
-        alert('לא נטענו עדכונים. ודא שקיים updates.json תקין.');
-      });
+        alert('שגיאה בטעינת קובץ: ' + filename);
+      }
+    }
 
-    // דפדוף בכפתורים
-    prevBtn.addEventListener('click', () => { if (idx > 0) loadFrontlineFor(idx - 1); });
-    nextBtn.addEventListener('click', () => { if (idx < UPDATES.length - 1) loadFrontlineFor(idx + 1); });
+    // ניווט
+    document.getElementById('prevBtn').onclick = async () => {
+      if (currentIndex > 0) {
+        currentIndex--;
+        await loadUpdate(currentIndex);
+      }
+    };
+    document.getElementById('nextBtn').onclick = async () => {
+      if (currentIndex < updates.length - 1) {
+        currentIndex++;
+        await loadUpdate(currentIndex);
+      }
+    };
 
-    // דפדוף עם מקשי חצים
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowLeft')  { if (idx > 0) loadFrontlineFor(idx - 1); }
-      if (e.key === 'ArrowRight') { if (idx < UPDATES.length - 1) loadFrontlineFor(idx + 1); }
-    });
+    // התחלת טעינה
+    fetchUpdates();
   </script>
 </body>
 </html>
