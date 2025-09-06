@@ -2,8 +2,8 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ukraine War Updates</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>מפת לחימה – דפדוף עדכונים</title>
 
   <!-- Leaflet -->
   <link
@@ -20,122 +20,150 @@
 
   <style>
     html, body, #map { height: 100%; margin: 0; }
-    .leaflet-control-layers-expanded { direction: rtl; }
-    /* שליטה בסדר ציור */
-    .pane-polys     { z-index: 450; }
-    .pane-frontline { z-index: 650; pointer-events: none; }
-
-    /* מקרא */
-    .legend {
-      position:absolute; bottom:14px; left:14px; background:#fff;
-      padding:8px 10px; border-radius:6px; box-shadow:0 1px 5px rgba(0,0,0,.3);
-      font:13px/1.2 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,Helvetica,sans-serif;
-      direction:rtl;
+    .toolbar {
+      position: absolute;
+      top: 10px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,255,255,0.9);
+      padding: 6px 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+      display: flex; gap: 8px; align-items: center;
+      z-index: 1000;
+      direction: rtl;
     }
-    .legend .row { display:flex; align-items:center; gap:8px; margin:4px 0; }
-    .legend .swatch { width:16px; height:12px; border:1px solid #0003; }
-    .swatch-ru { background:#e74c3c; }    /* אדום */
-    .swatch-ua { background:#f1c40f; }    /* צהוב */
+    .toolbar button {
+      border: 1px solid #ccc;
+      background: #fff;
+      border-radius: 6px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .toolbar button:disabled { opacity: .5; cursor: default; }
+    .date-label { font-weight: 600; min-width: 8ch; text-align: center; }
+    .legend {
+      position:absolute; bottom:12px; left:12px;
+      background: rgba(255,255,255,.9);
+      padding:6px 8px; border-radius:8px; font:13px/1.2 system-ui;
+      box-shadow:0 2px 8px rgba(0,0,0,.1);
+    }
+    .legend .key { display:flex; align-items:center; gap:6px; margin:3px 0; }
+    .chip { width:16px; height:3px; background:#d33; }
   </style>
 </head>
 <body>
   <div id="map"></div>
+
+  <div class="toolbar" aria-label="דפדוף בין עדכונים">
+    <button id="prevBtn" title="יום קודם (חץ שמאל)">◀</button>
+    <span class="date-label" id="dateLabel">—</span>
+    <button id="nextBtn" title="יום הבא (חץ ימין)">▶</button>
+  </div>
+
   <div class="legend">
-    <div class="row"><span class="swatch swatch-ru"></span> שטח בשליטה רוסית</div>
-    <div class="row"><span class="swatch swatch-ua"></span> שטח בשליטה אוקראינית</div>
+    <div class="key"><span class="chip"></span> קו חזית</div>
   </div>
 
   <script>
-    // === אתחול מפה ===
-    const map = L.map('map', {
-      zoomSnap: 0.25,
-      worldCopyJump: true,
-      preferCanvas: true
-    }).setView([48.5, 36.6], 6.75);
+    // מפה בסיסית
+    const map = L.map('map', { zoomControl: true }).setView([48.5, 36.7], 6);
+    L.tileLayer(
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { attribution: '&copy; OpenStreetMap contributors' }
+    ).addTo(map);
 
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
+    // שכבת קו חזית (נטען/נחליף בכל דפדוף)
+    let frontlineLayer = null;
 
-    // פנֵסים לשליטה בסדר הציור
-    map.createPane('pane-polys');
-    map.createPane('pane-frontline');
+    // נתוני העדכונים (נטען את updates.json מהריפו)
+    let UPDATES = [];
+    let idx = 0;
 
-    // === זיהוי "שדה שליטה" מפורש בלבד ===
-    const CONTROL_KEYS = ['control','controlled_by','side','status','owner','power','allegiance'];
+    const dateLabel = document.getElementById('dateLabel');
+    const prevBtn   = document.getElementById('prevBtn');
+    const nextBtn   = document.getElementById('nextBtn');
 
-    function readControl(props) {
-      if (!props) return null;
-      for (const k of CONTROL_KEYS) {
-        if (props[k] != null) return String(props[k]).toLowerCase().trim();
-      }
-      return null; // לא מנחשים משם/תיאור!
+    function setButtonsState() {
+      prevBtn.disabled = (idx <= 0);
+      nextBtn.disabled = (idx >= UPDATES.length - 1);
     }
 
-    function styleByControl(ctrl) {
-      if (ctrl === 'russia' || ctrl === 'russian' || ctrl === 'ru' || ctrl === 'occupied') {
-        return { pane:'pane-polys', color:'#b03a2e', weight:1, fillColor:'#e74c3c', fillOpacity:0.35 };
+    async function loadFrontlineFor(i) {
+      if (!UPDATES[i]) return;
+      idx = i;
+      setButtonsState();
+
+      const rec = UPDATES[i];
+      dateLabel.textContent = rec.date;
+
+      // נקה שכבה קודמת
+      if (frontlineLayer) {
+        map.removeLayer(frontlineLayer);
+        frontlineLayer = null;
       }
-      if (ctrl === 'ukraine' || ctrl === 'ukrainian' || ctrl === 'ua' || ctrl === 'liberated') {
-        return { pane:'pane-polys', color:'#b7950b', weight:1, fillColor:'#f1c40f', fillOpacity:0.30 };
+
+      // קודד נתיב עם רווחים
+      const url = encodeURI(rec.frontline);
+
+      try {
+        const gj = await fetch(url).then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        });
+
+        frontlineLayer = L.geoJSON(gj, {
+          style: feature => {
+            // אם זה LineString – צבע אדום
+            if (feature.geometry && feature.geometry.type === 'LineString') {
+              return { color: '#d33', weight: 3, opacity: 0.95 };
+            }
+            // פוליגון (אם בטעות נשאר): קו אדום, מילוי שקוף
+            if (feature.geometry && feature.geometry.type === 'Polygon') {
+              return { color: '#d33', weight: 2, fillOpacity: 0 };
+            }
+            return { color: '#d33', weight: 3 };
+          }
+        }).addTo(map);
+
+        // התאמת תצוגה
+        try { map.fitBounds(frontlineLayer.getBounds(), { padding:[20,20] }); } catch(e){}
+      } catch (e) {
+        console.error('שגיאה בטעינת הקובץ:', url, e);
+        alert('אירעה שגיאה בטעינת ' + rec.frontline);
       }
-      return null; // לא מציירים אם לא ברור
     }
 
-    // שכבת שטחים: מסננים features שאין להם שדה שליטה ברור
-    const territoriesLayer = L.geoJSON(null, {
-      filter: (feat) => {
-        const ctrl = readControl(feat.properties);
-        return !!styleByControl(ctrl);
-      },
-      style: (feat) => styleByControl(readControl(feat.properties)),
-      onEachFeature: (feat, layer) => {
-        const p = feat.properties || {};
-        const ctrl = readControl(p);
-        const lines = [];
-        if (p.name) lines.push(`<b>${p.name}</b>`);
-        if (ctrl)   lines.push(`Control: ${ctrl}`);
-        if (lines.length) layer.bindPopup(lines.join('<br/>'));
-      },
-      pane: 'pane-polys'
-    }).addTo(map);
-
-    fetch('territories.json')
+    // טעינת רשימת העדכונים
+    fetch('updates.json')
       .then(r => r.json())
       .then(data => {
-        territoriesLayer.addData(data);
-        try {
-          const f = (data.features && data.features.find(ft => styleByControl(readControl(ft.properties)))) || null;
-          if (f) console.log('Sample territory with control:', f.properties);
-        } catch(e){}
+        UPDATES = (data.updates || []).slice();
+
+        // מיון לפי תאריך אם צריך (YYYY-MM-DD) – רק למקרה
+        UPDATES.sort((a,b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+        if (!UPDATES.length) throw new Error('אין עדכונים');
+
+        // התחל מהאחרון
+        loadFrontlineFor(UPDATES.length - 1);
       })
       .catch(err => {
-        console.error('Failed loading territories.json', err);
-        alert('שגיאה בטעינת territories.json');
+        console.error(err);
+        alert('לא נטענו עדכונים. ודא שקיים updates.json תקין.');
       });
 
-    // קו חזית מעל הכול
-    const frontlineLayer = L.geoJSON(null, {
-      style: { pane:'pane-frontline', color:'#ff2d20', weight:3, opacity:0.95 },
-      pane: 'pane-frontline'
-    }).addTo(map);
+    // דפדוף בכפתורים
+    prevBtn.addEventListener('click', () => { if (idx > 0) loadFrontlineFor(idx - 1); });
+    nextBtn.addEventListener('click', () => { if (idx < UPDATES.length - 1) loadFrontlineFor(idx + 1); });
 
-    fetch('frontline.json')
-      .then(r => r.json())
-      .then(data => frontlineLayer.addData(data))
-      .catch(err => {
-        console.error('Failed loading frontline.json', err);
-        alert('שגיאה בטעינת frontline.json');
-      });
-
-    // בקרת שכבות
-    L.control.layers({ 'OpenStreetMap': osm }, {
-      'שטחי שליטה': territoriesLayer,
-      'קו חזית': frontlineLayer
-    }, { collapsed: false }).addTo(map);
-
-    L.control.scale({ imperial:false }).addTo(map);
+    // דפדוף עם מקשי חצים
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft')  { if (idx > 0) loadFrontlineFor(idx - 1); }
+      if (e.key === 'ArrowRight') { if (idx < UPDATES.length - 1) loadFrontlineFor(idx + 1); }
+    });
   </script>
 </body>
 </html>
+
