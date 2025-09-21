@@ -1,271 +1,327 @@
 <!doctype html>
 <html lang="he" dir="rtl">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ukraine War Updates — מפות עדכונים</title>
-  <meta name="description" content="מציג עדכון אחרון מכל חזית עם ניווט כרונולוגי מתוך תיקיות images/<front> ב-GitHub." />
-  <style>
-    :root{
-      --map-url: url("assets/ukraine-map-lite.jpg"); /* עדכן אם תרצה */
-      --bg-blur: 8px;
-      --brand: #0b6bcb; --brand-2:#0d3b66;
-      --ink:#0f172a; --ink-soft:#334155;
-      --panel: rgba(255,255,255,.9); --panel-weak: rgba(255,255,255,.6);
-    }
-    *{box-sizing:border-box}
-    html,body{margin:0;height:100%;background:#f1f5f9;color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Arial}
-    .app{min-height:100dvh;display:grid;grid-template-rows:auto 1fr auto}
-    .hero{min-height:40vh;background-image:var(--map-url);background-size:cover;background-position:center;position:relative;isolation:isolate}
-    .hero::after{content:"";position:absolute;inset:0;backdrop-filter:blur(var(--bg-blur));background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.75) 40%,rgba(255,255,255,.9))}
-    header{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:16px clamp(12px,3vw,32px)}
-    .brand{display:flex;gap:.5rem;align-items:baseline;font-weight:700}
-    .brand .dot{color:var(--brand)}
-    .tabs{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:8px;padding:0 clamp(12px,3vw,32px) 16px}
-    .tab{border:1px solid #e2e8f0;background:var(--panel);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer;user-select:none;transition:.15s}
-    .tab:hover{transform:translateY(-1px)}
-    .tab.active{background:#eaf3ff;border-color:#c7dcff;color:var(--brand-2);font-weight:700}
-    main{position:relative;z-index:1;padding:16px clamp(12px,3vw,32px) 28px;display:grid;gap:16px}
-    .panel{background:var(--panel);border:1px solid #e2e8f0;border-radius:16px;padding:clamp(10px,2vw,18px);box-shadow:0 10px 26px rgba(2,6,23,.04)}
-    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-    .title{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;font-weight:700}
-    .date-badge{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;padding:4px 10px;border-radius:999px;font-size:13px;display:inline-flex;gap:6px;align-items:center}
-    .controls{display:flex;gap:8px;align-items:center}
-    button.nav{border:1px solid #e2e8f0;background:#fff;color:var(--ink);border-radius:12px;padding:8px 10px;min-width:42px;cursor:pointer;transition:.15s;font-weight:700}
-    button.nav:disabled{opacity:.45;cursor:not-allowed}
-    button.nav:hover:not(:disabled){transform:translateY(-1px);background:#f8fafc}
-    .img-wrap{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:14px;background:#0b0b0b;border:1px solid #e2e8f0}
-    .img-wrap img{width:100%;height:100%;object-fit:contain;display:block}
-    .caption{font-size:13px;color:var(--ink-soft);display:flex;justify-content:space-between;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap}
-    .status{font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid #e2e8f0;background:var(--panel-weak)}
-    .status.ok{border-color:#bbf7d0;background:#ecfdf5;color:#065f46}
-    .status.err{border-color:#fecaca;background:#fef2f2;color:#7f1d1d}
-    .loading{position:absolute;inset:0;display:grid;place-items:center;background:repeating-linear-gradient(45deg,rgba(255,255,255,0) 0 24px,rgba(255,255,255,.5) 24px 48px);animation:pulse 1.2s infinite}
-    @keyframes pulse{0%{opacity:.6}50%{opacity:1}100%{opacity:.6}}
-    footer{padding:14px clamp(12px,3vw,32px);color:#475569;font-size:12px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
-    a{color:var(--brand-2);text-decoration:none} a:hover{text-decoration:underline}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ukraine War Updates</title>
+<meta name="description" content="דף בית עם חזיתות על מפה, ותצוגת עדכון יומי במסך מלא עם ניווט חיצים." />
+<style>
+  :root{
+    --map-url: url("assets/ukraine-map-lite.jpg"); /* החלף לתמונת מפה כרצונך */
+    --ink:#0f172a; --ink2:#334155; --brand:#0b6bcb; --brand2:#0d3b66;
+    --panel: rgba(255,255,255,.92); --panel-soft: rgba(255,255,255,.75);
+    --ring:#c7dcff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Arial;color:var(--ink);background:#f1f5f9}
+
+  /* ====== HEADER ====== */
+  header{
+    position:fixed; inset-inline:0; top:0; z-index:30;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px clamp(12px,3vw,28px);
+    background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.75));
+    backdrop-filter:saturate(1.1) blur(6px); border-bottom:1px solid #e2e8f0;
+  }
+  .brand{display:flex; gap:.5rem; align-items:baseline; font-weight:800}
+  .brand .dot{color:var(--brand)}
+  .hint{font-size:12px; color:var(--ink2)}
+
+  /* ====== HOME VIEW ====== */
+  #homeView{
+    padding:84px clamp(12px,3vw,28px) 24px; /* מקום ל-header */
+    min-height:100vh;
+    background-image:var(--map-url);
+    background-size:cover; background-position:center;
+    position:relative; isolation:isolate;
+  }
+  #homeView::after{
+    content:""; position:absolute; inset:0; z-index:0;
+    backdrop-filter:blur(6px);
+    background:linear-gradient(180deg, rgba(255,255,255,.65), rgba(255,255,255,.9));
+  }
+  .home-inner{position:relative; z-index:1;}
+  .front-grid{
+    display:grid; gap:12px;
+    grid-template-columns:repeat(auto-fill, minmax(160px,1fr));
+  }
+  .front-card{
+    cursor:pointer; user-select:none;
+    border:1px solid #e2e8f0; border-radius:16px; padding:14px;
+    background:var(--panel); box-shadow:0 10px 26px rgba(2,6,23,.05);
+    transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    font-weight:700;
+  }
+  .front-card:hover{ transform:translateY(-2px); border-color:var(--ring); box-shadow:0 12px 30px rgba(11,107,203,.08) }
+  .front-card small{ display:block; margin-top:6px; color:var(--ink2); font-weight:500 }
+
+  /* ====== DETAIL VIEW (FULLSCREEN IMAGE) ====== */
+  #detailView{ display:none; background:#0b0b0b; color:white; min-height:100vh; }
+  .detail-wrap{
+    padding:62px 10px 10px; /* מקום ל-header הדק */
+  }
+  .detail-toolbar{
+    position:fixed; top:0; inset-inline:0; z-index:40;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px clamp(10px,3vw,18px);
+    background:linear-gradient(180deg, rgba(0,0,0,.75), rgba(0,0,0,.35));
+    color:#e5e7eb; border-bottom:1px solid rgba(255,255,255,.1);
+  }
+  .detail-left{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .title{font-weight:800}
+  .date-badge{background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); padding:4px 10px; border-radius:999px; font-size:13px}
+  .controls{display:flex; gap:8px}
+  button.nav, .home-btn{
+    border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.1); color:#fff;
+    border-radius:10px; padding:8px 12px; cursor:pointer; font-weight:800;
+    transition:filter .12s ease; min-width:44px
+  }
+  button.nav:disabled{opacity:.5; cursor:not-allowed}
+  button.nav:hover:not(:disabled), .home-btn:hover{ filter:brightness(1.15) }
+
+  .stage{
+    width:100%; height:calc(100vh - 82px); /* מסך מלא פחות הטולבר */
+    display:grid; place-items:center;
+  }
+  .stage img{
+    max-width:100%; max-height:100%;
+    object-fit:contain; display:block; background:#0b0b0b;
+    border-radius:14px;
+  }
+  .loading{
+    position:absolute; inset:0; display:grid; place-items:center;
+    color:#e5e7eb; font-weight:700;
+    background:rgba(0,0,0,.0);
+  }
+  .caption{
+    position:fixed; bottom:10px; inset-inline:10px;
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    color:#e5e7eb; font-size:13px;
+    background:linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.45));
+    padding:12px 10px; border-radius:12px;
+  }
+  .status{ border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.12); padding:4px 8px; border-radius:8px; }
+  .status.ok{ color:#bbf7d0; border-color:#bbf7d0; }
+  .status.err{ color:#fecaca; border-color:#fecaca; }
+</style>
 </head>
 <body>
-  <div class="app">
-    <section class="hero">
-      <header>
-        <div class="brand"><span class="dot">●</span><span>Ukraine War Updates</span></div>
-        <div style="font-size:12px;color:#334155">טיפ: מקשי ←/→ לניווט בין תאריכים</div>
-      </header>
-      <nav class="tabs" id="tabs" aria-label="בחירת חזית"></nav>
-    </section>
 
-    <main>
-      <div class="panel">
-        <div class="toolbar">
-          <div class="title">
-            <span id="frontTitle">—</span>
-            <span class="date-badge" id="dateBadge">—</span>
-          </div>
-          <div class="controls">
-            <button class="nav" id="prevBtn" title="עדכון קודם" aria-label="עדכון קודם">⟵</button>
-            <button class="nav" id="nextBtn" title="עדכון הבא" aria-label="עדכון הבא">⟶</button>
-          </div>
-        </div>
+<header>
+  <div class="brand"><span class="dot">●</span><span>Ukraine War Updates</span></div>
+  <div class="hint">טיפ: ← / → לניווט בין תאריכים</div>
+</header>
 
-        <div class="img-wrap">
-          <div class="loading" id="loading" hidden>טוען…</div>
-          <img id="frontImage" alt="תמונת עדכון" />
-        </div>
+<!-- ===== HOME ===== -->
+<section id="homeView">
+  <div class="home-inner">
+    <h2 style="margin:0 0 10px 0;">בחר חזית:</h2>
+    <div id="frontGrid" class="front-grid"></div>
+  </div>
+</section>
 
-        <div class="caption">
-          <div id="captionLeft">—</div>
-          <div id="captionRight" class="status">—</div>
-        </div>
-      </div>
-    </main>
-
-    <footer>
-      <div>Repo: <a id="repoLink" target="_blank" rel="noopener">GitHub</a></div>
-      <div>מצב: <span id="appStatus" class="status ok">מוכן</span></div>
-    </footer>
+<!-- ===== DETAIL ===== -->
+<section id="detailView" aria-live="polite">
+  <div class="detail-toolbar">
+    <div class="detail-left">
+      <button class="home-btn" id="homeBtn" title="חזרה לבית">בית</button>
+      <span class="title" id="frontTitle">—</span>
+      <span class="date-badge" id="dateBadge">—</span>
+    </div>
+    <div class="controls">
+      <button class="nav" id="prevBtn" title="עדכון קודם">⟵</button>
+      <button class="nav" id="nextBtn" title="עדכון הבא">⟶</button>
+    </div>
   </div>
 
-  <script>
-  // ===== קריאת תצורה מ-updates.json =====
-  const state = {
-    config: null,
-    filesByFront: new Map(), // key -> [{name,path,url,date}]
-    indexByFront: new Map(),
-    currentKey: null
+  <div class="detail-wrap">
+    <div class="stage">
+      <div class="loading" id="loading" hidden>טוען…</div>
+      <img id="frontImage" alt="עדכון חזית" />
+    </div>
+    <div class="caption">
+      <div id="captionLeft">—</div>
+      <div id="captionRight" class="status">—</div>
+    </div>
+  </div>
+</section>
+
+<script>
+/* ============ helpers ============ */
+const fmtDate = (d)=> d.toLocaleDateString('he-IL',{year:'numeric',month:'2-digit',day:'2-digit'});
+const $ = (id)=>document.getElementById(id);
+
+/* ============ state & elements ============ */
+let CFG=null;
+const state = {
+  filesByFront: new Map(), // key -> [{name, url, date}]
+  indexByFront: new Map(),
+  currentKey: null
+};
+
+const els = {
+  home: $('homeView'),
+  grid: $('frontGrid'),
+  detail: $('detailView'),
+  homeBtn: $('homeBtn'),
+  title: $('frontTitle'),
+  badge: $('dateBadge'),
+  img: $('frontImage'),
+  loading: $('loading'),
+  prev: $('prevBtn'),
+  next: $('nextBtn'),
+  capLeft: $('captionLeft'),
+  capRight: $('captionRight')
+};
+
+function showHome(){
+  history.replaceState({},'',location.pathname); // מנקה ?front
+  els.detail.style.display='none';
+  els.home.style.display='block';
+}
+function showDetail(){
+  els.home.style.display='none';
+  els.detail.style.display='block';
+}
+
+function setLoading(on){ els.loading.hidden = !on; }
+function setImgError(msg){
+  els.img.removeAttribute('src');
+  els.capRight.className='status err';
+  els.capRight.textContent=msg;
+  setLoading(false);
+}
+
+/* ============ GitHub I/O ============ */
+function rawUrl(path){
+  const {owner,repo,branch} = CFG.repo;
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodeURI(path)}`;
+}
+async function ghList(path){
+  const {owner,repo,branch} = CFG.repo;
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
+  const res = await fetch(url,{headers:{'Accept':'application/vnd.github+json'}});
+  if(!res.ok) throw new Error('GitHub API '+res.status);
+  return res.json();
+}
+function extractDateFromFilename(name){
+  const m = name.toLowerCase().match(/-(\d{4})-(\d{1,2})-(\d{1,2})\.(png|jpe?g|webp)$/i);
+  if(!m) return null;
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  return isNaN(+d)?null:d;
+}
+async function loadFrontFiles(frontKey){
+  const base = `${CFG.repo.basePath}/${frontKey}`;
+  const arr = await ghList(base);
+  const items = arr
+    .filter(x=>x.type==='file' && /\.(png|jpe?g|webp)$/i.test(x.name))
+    .map(x=>({ name:x.name, url: rawUrl(`${base}/${x.name}`), date: extractDateFromFilename(x.name)}))
+    .filter(x=>x.date)
+    .sort((a,b)=> a.date - b.date);
+  state.filesByFront.set(frontKey, items);
+  state.indexByFront.set(frontKey, Math.max(0, items.length-1)); // אחרון
+}
+
+/* ============ UI build ============ */
+function buildHome(){
+  els.grid.innerHTML='';
+  CFG.fronts.forEach(f=>{
+    const card = document.createElement('button');
+    card.className='front-card';
+    card.type='button';
+    card.innerHTML = `<div>${f.display || f.key}<small>${f.key}</small></div>`;
+    card.addEventListener('click', ()=>openFront(f.key));
+    els.grid.appendChild(card);
+  });
+}
+function markArrows(idx, len){
+  els.prev.disabled = (idx<=0);
+  els.next.disabled = (idx>=len-1);
+}
+function renderDetail(){
+  const key = state.currentKey;
+  const meta = CFG.fronts.find(x=>x.key===key);
+  if(!meta) return;
+  const files = state.filesByFront.get(key) || [];
+  const idx = Math.max(0, Math.min(state.indexByFront.get(key) ?? (files.length-1), files.length-1));
+  markArrows(idx, files.length);
+
+  els.title.textContent = meta.display || meta.key;
+
+  if(!files.length){
+    els.badge.textContent='—';
+    els.capLeft.textContent=`אין קבצים ב-${key} בפורמט front-YYYY-M-D`;
+    setImgError('לא נמצאו תמונות');
+    return;
+  }
+
+  const item = files[idx];
+  els.badge.textContent = fmtDate(item.date);
+  els.capLeft.textContent = item.name;
+
+  setLoading(true);
+  const probe = new Image();
+  probe.onload = ()=>{
+    els.img.src = item.url;
+    els.img.alt = `${meta.display || key} — ${fmtDate(item.date)}`;
+    els.capRight.className='status ok';
+    els.capRight.textContent='נטען בהצלחה';
+    setLoading(false);
   };
+  probe.onerror = ()=> setImgError('שגיאה בטעינת התמונה');
+  probe.referrerPolicy = "no-referrer";
+  probe.src = item.url;
+}
 
-  const el = {
-    tabs: document.getElementById('tabs'),
-    title: document.getElementById('frontTitle'),
-    badge: document.getElementById('dateBadge'),
-    img: document.getElementById('frontImage'),
-    loading: document.getElementById('loading'),
-    prev: document.getElementById('prevBtn'),
-    next: document.getElementById('nextBtn'),
-    capLeft: document.getElementById('captionLeft'),
-    capRight: document.getElementById('captionRight'),
-    appStatus: document.getElementById('appStatus'),
-    repoLink: document.getElementById('repoLink')
-  };
-
-  const fmtDate = (d) => d.toLocaleDateString('he-IL',{year:'numeric',month:'2-digit',day:'2-digit'});
-
-  function setAppStatus(msg, ok=true){ el.appStatus.textContent=msg; el.appStatus.className='status '+(ok?'ok':'err'); }
-  function setLoading(on){ el.loading.hidden = !on; }
-  function setImgError(msg){ el.img.removeAttribute('src'); el.capRight.className='status err'; el.capRight.textContent=msg; setLoading(false); }
-
-  function ghRepoUrl(){ const {owner,repo}=state.config.repo; return `https://github.com/${owner}/${repo}`; }
-  function rawUrl(path){
-    const {owner,repo,branch} = state.config.repo;
-    return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodeURI(path)}`;
+/* ============ navigation ============ */
+async function openFront(key){
+  state.currentKey = key;
+  if(!state.filesByFront.has(key)){
+    try{ await loadFrontFiles(key); }catch(e){ console.error(e); state.filesByFront.set(key,[]); }
   }
-  async function ghList(path){
-    const {owner,repo,branch} = state.config.repo;
-    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
-    const res = await fetch(url,{headers:{'Accept':'application/vnd.github+json'}});
-    if(!res.ok) throw new Error(`GitHub API ${res.status}`);
-    return res.json();
-  }
+  const u = new URL(location.href); u.searchParams.set('front', key); history.replaceState({},'',u);
+  showDetail();
+  renderDetail();
+}
+function step(delta){
+  const key = state.currentKey;
+  const files = state.filesByFront.get(key) || [];
+  if(!files.length) return;
+  const curr = state.indexByFront.get(key) ?? (files.length-1);
+  const next = Math.max(0, Math.min(curr+delta, files.length-1));
+  if(next!==curr){ state.indexByFront.set(key,next); renderDetail(); }
+}
+els.prev.addEventListener('click', ()=>step(-1));
+els.next.addEventListener('click', ()=>step(+1));
+document.addEventListener('keydown', (e)=>{
+  if(els.detail.style.display!=='block') return;
+  if(e.key==='ArrowLeft') step(-1);
+  if(e.key==='ArrowRight') step(+1);
+});
+els.homeBtn.addEventListener('click', showHome);
 
-  function buildTabs(fronts){
-    el.tabs.innerHTML = '';
-    fronts.forEach(f=>{
-      const b=document.createElement('button');
-      b.className='tab';
-      b.type='button';
-      b.textContent=f.display || f.key;
-      b.dataset.key=f.key;
-      b.addEventListener('click', ()=>selectFront(f.key));
-      el.tabs.appendChild(b);
-    });
-  }
-  function markActive(key){
-    [...document.querySelectorAll('.tab')].forEach(t=>t.classList.toggle('active', t.dataset.key===key));
-  }
+/* ============ init ============ */
+(async function init(){
+  try{
+    const res = await fetch('updates.json',{cache:'no-store'});
+    if(!res.ok) throw new Error('updates.json missing');
+    CFG = await res.json();
 
-  // תאריך מתוך שם קובץ בסגנון front-YYYY-M-D.xxx
-  function extractDateFromFilename(name){
-    const m = name.toLowerCase().match(/-(\d{4})-(\d{1,2})-(\d{1,2})\.(png|jpe?g|webp)$/i);
-    if(!m) return null;
-    const Y=+m[1], M=+m[2], D=+m[3];
-    const d = new Date(Y, M-1, D);
-    return isNaN(+d) ? null : d;
-  }
+    buildHome();
+    showHome();
 
-  async function loadFrontFiles(frontKey){
-    const base = `${state.config.repo.basePath}/${frontKey}`;
-    const arr = await ghList(base);
-    const items = arr
-      .filter(x=>x.type==='file' && /\.(png|jpe?g|webp)$/i.test(x.name))
-      .map(x=>({ name:x.name, path:`${base}/${x.name}`, url: rawUrl(`${base}/${x.name}`), date: extractDateFromFilename(x.name)}))
-      .filter(x=>x.date);
-    items.sort((a,b)=> a.date - b.date);
-    state.filesByFront.set(frontKey, items);
-    state.indexByFront.set(frontKey, Math.max(0, items.length-1)); // האחרון
-  }
-
-  function render(){
-    const fronts = state.config.fronts;
-    const front = fronts.find(f=>f.key===state.currentKey);
-    if(!front) return;
-
-    el.title.textContent = front.display || front.key;
-    const files = state.filesByFront.get(front.key) || [];
-    const idx = Math.max(0, Math.min(state.indexByFront.get(front.key) ?? (files.length-1), files.length-1));
-    el.prev.disabled = (idx<=0);
-    el.next.disabled = (idx>=files.length-1);
-
-    if(!files.length){
-      el.badge.textContent='—';
-      el.capLeft.textContent=`אין קבצים ב-${front.key} או ששם הקובץ לא בפורמט front-YYYY-M-D`;
-      setImgError('לא נמצאו תמונות');
-      return;
+    // אם נכנסים עם פרמטר front=... נפתח ישירות לחזית (ועדיין יש כפתור חזרה)
+    const urlFront = new URL(location.href).searchParams.get('front');
+    if(urlFront && CFG.fronts.find(f=>f.key===urlFront)){
+      await openFront(urlFront);
     }
-
-    const item = files[idx];
-    el.badge.textContent = fmtDate(item.date);
-    el.capLeft.textContent = item.name;
-
-    setLoading(true);
-    const probe = new Image();
-    probe.onload = ()=>{
-      el.img.src = item.url;
-      el.img.alt = `${front.display || front.key} — ${fmtDate(item.date)}`;
-      el.capRight.className='status ok';
-      el.capRight.textContent='נטען בהצלחה';
-      setLoading(false);
-      // קדם-טעינה לשכנים
-      [idx-1, idx+1].forEach(i=>{
-        const n = files[i];
-        if(n){ const im=new Image(); im.referrerPolicy="no-referrer"; im.src=n.url; }
-      });
-    };
-    probe.onerror = ()=> setImgError('שגיאה בטעינת התמונה');
-    probe.referrerPolicy="no-referrer";
-    probe.src = item.url;
+  }catch(err){
+    console.error(err);
+    alert('שגיאה בטעינת התצורה. ודא שקיים updates.json תקין.');
   }
-
-  function selectFront(key){
-    state.currentKey = key;
-    markActive(key);
-    if(!state.filesByFront.has(key)){
-      loadFrontFiles(key).then(render).catch(err=>{
-        console.error(err);
-        setAppStatus('שגיאה בטעינת GitHub API', false);
-        setImgError('שגיאה בטעינת נתונים');
-      });
-    }else{
-      render();
-    }
-    const u = new URL(location.href); u.searchParams.set('front', key); history.replaceState({},'',u);
-  }
-
-  function step(delta){
-    const key = state.currentKey;
-    const files = state.filesByFront.get(key) || [];
-    if(!files.length) return;
-    const curr = state.indexByFront.get(key) ?? (files.length-1);
-    const next = Math.max(0, Math.min(curr+delta, files.length-1));
-    if(next!==curr){ state.indexByFront.set(key,next); render(); }
-  }
-
-  el.prev.addEventListener('click', ()=>step(-1));
-  el.next.addEventListener('click', ()=>step(+1));
-  document.addEventListener('keydown', (e)=>{ if(e.key==='ArrowLeft') step(-1); if(e.key==='ArrowRight') step(+1); });
-
-  // ===== אתחול =====
-  (async function init(){
-    try{
-      setAppStatus('טוען תצורה…');
-      const res = await fetch('updates.json',{cache:'no-store'});
-      if(!res.ok) throw new Error('updates.json missing');
-      state.config = await res.json();
-
-      el.repoLink.href = ghRepoUrl();
-      buildTabs(state.config.fronts);
-
-      // בחר חזית מ-param או הראשונה
-      const urlFront = new URL(location.href).searchParams.get('front');
-      const firstKey = state.config.fronts.find(f=>f.key===urlFront)?.key || state.config.fronts[0].key;
-
-      // נטען קבצים לכל החזיתות ברקע, אבל נתחיל מהרלוונטית כדי להציג מהר
-      await loadFrontFiles(firstKey);
-      selectFront(firstKey);
-      setAppStatus('מוכן', true);
-
-      // טעינה ברקע לשאר (לפי התור, למניעת rate limit)
-      for(const f of state.config.fronts){
-        if(f.key===firstKey) continue;
-        try{ await loadFrontFiles(f.key); }catch(_e){}
-      }
-    }catch(err){
-      console.error(err);
-      setAppStatus('שגיאה בטעינת תצורה', false);
-    }
-  })();
-  </script>
+})();
+</script>
 </body>
 </html>
 
