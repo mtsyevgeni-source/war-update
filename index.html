@@ -4,19 +4,15 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Ukraine War Updates</title>
-<meta name="description" content="דף בית על מפת אוקראינה ותצוגת עדכוני חזית במסך מלא עם ניווט חיצים.">
+<meta name="description" content="דף בית על מפת אוקראינה ותצוגת עדכוני חזית במסך מלא עם ניווט.">
 <style>
   :root{
     --ink:#0f172a; --ink2:#334155; --brand:#0b6bcb; --ring:#c7dcff;
     --panel: rgba(255,255,255,.92);
-    --hdr: 56px;                  /* גובה ההדר הקבוע */
+    --hdr: 56px;
   }
   *{box-sizing:border-box}
-  html,body{
-    height:100%; margin:0;
-    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Arial;
-    color:var(--ink); background:#f1f5f9; overflow:hidden; /* לא לגלול דף; הכל בתוך תצוגות */
-  }
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Arial;color:var(--ink);background:#f1f5f9;overflow:hidden}
 
   /* ===== HEADER ===== */
   header{
@@ -29,23 +25,14 @@
   .brand{font-weight:800}
   .hint{font-size:12px; color:var(--ink2)}
 
-  /* ===== HOME VIEW ===== */
+  /* ===== HOME ===== */
   #homeView{ position:fixed; inset:var(--hdr) 0 0 0; display:block; }
   .home-bg{ position:absolute; inset:0; z-index:0; background-size:cover; background-position:center; }
   .home-glass{ position:absolute; inset:0; z-index:1; backdrop-filter:blur(6px); background:linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,.88)); }
-  .home-inner{
-    position:relative; z-index:2; height:100%;
-    padding:18px clamp(12px,3vw,28px);
-    display:grid; grid-template-rows:auto 1fr;
-  }
-  .front-grid{
-    align-self:start;
-    display:grid; gap:12px;
-    grid-template-columns:repeat(auto-fill, minmax(160px,1fr));
-  }
+  .home-inner{ position:relative; z-index:2; height:100%; padding:18px clamp(12px,3vw,28px); display:grid; grid-template-rows:auto 1fr; }
+  .front-grid{ align-self:start; display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); }
   .front-card{
-    cursor:pointer; user-select:none;
-    border:1px solid #e2e8f0; border-radius:16px; padding:14px;
+    cursor:pointer; user-select:none; border:1px solid #e2e8f0; border-radius:16px; padding:14px;
     background:var(--panel); box-shadow:0 10px 26px rgba(2,6,23,.05);
     transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
     text-align:center; font-weight:700;
@@ -53,7 +40,7 @@
   .front-card:hover{ transform:translateY(-2px); border-color:var(--ring); box-shadow:0 12px 30px rgba(11,107,203,.08) }
   .front-card small{ display:block; margin-top:6px; color:var(--ink2); font-weight:500 }
 
-  /* ===== DETAIL VIEW (FULLSCREEN) ===== */
+  /* ===== DETAIL (FULLSCREEN) ===== */
   #detailView{ position:fixed; inset:var(--hdr) 0 0 0; display:none; }
   .detail-ui{
     position:fixed; top:0; inset-inline:0; height:var(--hdr); z-index:40;
@@ -64,18 +51,12 @@
   }
   .title{font-weight:800}
   .date-badge{background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); padding:4px 10px; border-radius:999px; font-size:13px}
-  .controls{display:flex; gap:8px}
-  .btn{
-    border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.1); color:#fff;
-    border-radius:10px; padding:8px 12px; cursor:pointer; font-weight:800; min-width:44px;
-  }
-  .btn:disabled{opacity:.5; cursor:not-allowed}
 
-  /* במה = תמונת העדכון במסך מלא + רקע מטושטש מאותה תמונה */
+  /* במה = תמונה במסך מלא + רקע מטושטש מאותה תמונה */
   .stage{
     position:fixed; top:var(--hdr); left:0; right:0; bottom:0; overflow:hidden;
     display:grid; place-items:center;
-    background:#000; background-size:cover; background-position:center; /* נקבע דינמית */
+    background:#000; background-size:cover; background-position:center; /* יוגדר דינמית */
   }
   .stage::before{
     content:""; position:absolute; inset:0; z-index:0;
@@ -87,6 +68,21 @@
     object-fit:contain; display:block; background:transparent;
   }
 
+  /* פס בקרה ימני קבוע */
+  .side-controls{
+    position:fixed; right:12px; top:calc(var(--hdr) + 50%); transform:translateY(-50%);
+    z-index:41; display:flex; flex-direction:column; gap:10px; align-items:center;
+  }
+  .btn{
+    border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.15); color:#fff;
+    border-radius:12px; padding:10px 12px; cursor:pointer; font-weight:800; min-width:46px; min-height:46px;
+    box-shadow:0 6px 18px rgba(0,0,0,.25); backdrop-filter:saturate(1.1) blur(2px);
+  }
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+  .btn.home{padding:10px 16px}
+  .btn.big{font-size:20px; line-height:1}
+
+  /* כיתוב תחתון */
   .caption{
     position:fixed; bottom:10px; inset-inline:10px; z-index:41;
     display:flex; justify-content:space-between; align-items:center; gap:8px;
@@ -99,6 +95,9 @@
   .status.err{ color:#fecaca; border-color:#fecaca; }
 
   .loading{ position:fixed; inset:var(--hdr) 0 0 0; display:grid; place-items:center; color:#e5e7eb; font-weight:700; pointer-events:none; }
+  @media (max-width: 640px){
+    .side-controls{ right:8px }
+  }
 </style>
 </head>
 <body>
@@ -122,19 +121,22 @@
 <section id="detailView" aria-live="polite">
   <div class="detail-ui">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <button class="btn" id="homeBtn" title="חזרה לבית">בית</button>
       <span class="title" id="frontTitle">—</span>
       <span class="date-badge" id="dateBadge">—</span>
     </div>
-    <div class="controls">
-      <button class="btn" id="prevBtn" title="עדכון קודם">⟵</button>
-      <button class="btn" id="nextBtn" title="עדכון הבא">⟶</button>
-    </div>
+    <div></div>
   </div>
 
   <div class="stage" id="stage">
     <div class="loading" id="loading" hidden>טוען…</div>
     <img id="frontImage" alt="עדכון חזית" />
+  </div>
+
+  <!-- פס הבקרה הימני -->
+  <div class="side-controls" id="sideControls" aria-label="בקרת ניווט">
+    <button class="btn home" id="homeBtn" title="חזרה לבית">בית</button>
+    <button class="btn big" id="prevBtn" title="עדכון קודם" aria-label="עדכון קודם">⟵</button>
+    <button class="btn big" id="nextBtn" title="עדכון הבא" aria-label="עדכון הבא">⟶</button>
   </div>
 
   <div class="caption">
@@ -153,15 +155,15 @@ let CFG=null;
 const state = { filesByFront:new Map(), indexByFront:new Map(), currentKey:null };
 const el = {
   home: $('homeView'), grid: $('frontGrid'), homeBg: $('homeBg'),
-  detail: $('detailView'), homeBtn: $('homeBtn'),
+  detail: $('detailView'),
   title: $('frontTitle'), badge: $('dateBadge'),
   img: $('frontImage'), loading: $('loading'),
-  prev: $('prevBtn'), next: $('nextBtn'),
+  prev: $('prevBtn'), next: $('nextBtn'), homeBtn: $('homeBtn'),
   capLeft: $('captionLeft'), capRight: $('captionRight'),
   stage: $('stage')
 };
 
-function showHome(){ history.replaceState({},'',location.pathname); el.detail.style.display='none'; el.home.style.display='block'; }
+function showHome(){ history.replaceState({},'',location.pathname); el.detail.style.display='block'; el.home.style.display='block'; el.detail.style.display='none'; }
 function showDetail(){ el.home.style.display='none'; el.detail.style.display='block'; }
 function setLoading(on){ el.loading.hidden = !on; }
 function setImgError(msg){ el.img.removeAttribute('src'); el.capRight.className='status err'; el.capRight.textContent=msg; setLoading(false); }
@@ -176,7 +178,6 @@ async function ghList(path){
   return res.json();
 }
 function extractDateFromFilename(name){
-  // <front>-YYYY-M-D.ext  (M/D יכולים להיות ספרה אחת)
   const m = name.toLowerCase().match(/-(\d{4})-(\d{1,2})-(\d{1,2})\.(png|jpe?g|webp)$/i);
   if(!m) return null;
   const d = new Date(+m[1], +m[2]-1, +m[3]);
@@ -191,10 +192,10 @@ async function loadFrontFiles(frontKey){
     .filter(x=>x.date)
     .sort((a,b)=> a.date - b.date);
   state.filesByFront.set(frontKey, items);
-  state.indexByFront.set(frontKey, Math.max(0, items.length-1)); // האחרון כברירת מחדל
+  state.indexByFront.set(frontKey, Math.max(0, items.length-1));
 }
 
-/* ===== UI build ===== */
+/* ===== HOME ===== */
 function buildHome(){
   el.grid.innerHTML='';
   CFG.fronts.forEach(f=>{
@@ -204,13 +205,10 @@ function buildHome(){
     card.addEventListener('click', ()=>openFront(f.key));
     el.grid.appendChild(card);
   });
-  // מפה כרקע
-  if (CFG.homeMap) {
-    el.homeBg.style.backgroundImage = `url("${CFG.homeMap}")`;
-  } else {
-    el.homeBg.style.background = 'linear-gradient(135deg,#eef2ff,#e2e8f0)';
-  }
+  el.homeBg.style.backgroundImage = CFG.homeMap ? `url("${CFG.homeMap}")` : 'linear-gradient(135deg,#eef2ff,#e2e8f0)';
 }
+
+/* ===== DETAIL ===== */
 function markArrows(idx,len){ el.prev.disabled=(idx<=0); el.next.disabled=(idx>=len-1); }
 function setStageBg(url){ el.stage.style.backgroundImage = url ? `url("${url}")` : ''; }
 function renderDetail(){
@@ -238,8 +236,8 @@ function renderDetail(){
   setLoading(true);
   const probe = new Image();
   probe.onload = ()=>{
-    setStageBg(item.url);                 // רקע מטושטש ממלא מסך
-    el.img.src = item.url;                // התמונה עצמה (contain)
+    setStageBg(item.url);
+    el.img.src = item.url;
     el.img.alt = `${meta.display || key} — ${fmtDate(item.date)}`;
     el.capRight.className='status ok';
     el.capRight.textContent='נטען בהצלחה';
@@ -250,7 +248,7 @@ function renderDetail(){
   probe.src=item.url;
 }
 
-/* ===== navigation ===== */
+/* ===== NAV ===== */
 async function openFront(key){
   state.currentKey = key;
   if(!state.filesByFront.has(key)){ try{ await loadFrontFiles(key); }catch(e){ console.error(e); state.filesByFront.set(key,[]); } }
@@ -267,9 +265,9 @@ function step(delta){
 el.prev.addEventListener('click', ()=>step(-1));
 el.next.addEventListener('click', ()=>step(+1));
 document.addEventListener('keydown', (e)=>{ if(el.detail.style.display!=='block') return; if(e.key==='ArrowLeft') step(-1); if(e.key==='ArrowRight') step(+1); });
-el.homeBtn.addEventListener('click', showHome);
+document.getElementById('homeBtn').addEventListener('click', showHome);
 
-/* ===== init ===== */
+/* ===== INIT ===== */
 (async function init(){
   try{
     const res = await fetch('updates.json',{cache:'no-store'});
@@ -277,12 +275,11 @@ el.homeBtn.addEventListener('click', showHome);
     CFG = await res.json();
     buildHome();
     showHome();
-    // פתיחה ישירה עם ?front=
     const urlFront = new URL(location.href).searchParams.get('front');
     if(urlFront && CFG.fronts.find(f=>f.key===urlFront)){ await openFront(urlFront); }
   }catch(err){
     console.error(err);
-    alert('שגיאה בטעינת התצורה. ודא שקיים updates.json תקין וקובץ מפה ב-assets.');
+    alert('שגיאה בטעינת התצורה. ודא שקיים updates.json תקין.');
   }
 })();
 </script>
