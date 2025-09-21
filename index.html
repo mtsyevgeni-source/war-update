@@ -4,10 +4,10 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Ukraine War Updates</title>
-<meta name="description" content="דף בית על מפת אוקראינה ותצוגת עדכוני חזית במסך מלא עם ניווט.">
+<meta name="description" content="דף בית על מפת אוקראינה ותצוגת עדכוני חזית במסך מלא עם ניווט וחלון הגדלה.">
 <style>
   :root{
-    --ink:#0f172a; --ink2:#334155; --brand:#0b6bcb; --ring:#c7dcff;
+    --ink:#0f172a; --ink2:#334155; --ring:#c7dcff;
     --panel: rgba(255,255,255,.92);
     --hdr: 56px;
   }
@@ -56,15 +56,11 @@
   .stage{
     position:fixed; top:var(--hdr); left:0; right:0; bottom:0; overflow:hidden;
     display:grid; place-items:center;
-    background:#000; background-size:cover; background-position:center; /* יוגדר דינמית */
+    background:#000; background-size:cover; background-position:center;
   }
-  .stage::before{
-    content:""; position:absolute; inset:0; z-index:0;
-    backdrop-filter: blur(18px) saturate(1.05); opacity:.9;
-  }
+  .stage::before{ content:""; position:absolute; inset:0; z-index:0; backdrop-filter: blur(18px) saturate(1.05); opacity:.9; }
   .stage img{
-    position:relative; z-index:1;
-    width:100vw; height:calc(100vh - var(--hdr));
+    position:relative; z-index:1; width:100vw; height:calc(100vh - var(--hdr));
     object-fit:contain; display:block; background:transparent;
   }
 
@@ -81,6 +77,7 @@
   .btn:disabled{opacity:.5; cursor:not-allowed}
   .btn.home{padding:10px 16px}
   .btn.big{font-size:20px; line-height:1}
+  .btn.zoom{font-size:18px}
 
   /* כיתוב תחתון */
   .caption{
@@ -93,18 +90,32 @@
   .status{ border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.12); padding:4px 8px; border-radius:8px; }
   .status.ok{ color:#bbf7d0; border-color:#bbf7d0; }
   .status.err{ color:#fecaca; border-color:#fecaca; }
-
   .loading{ position:fixed; inset:var(--hdr) 0 0 0; display:grid; place-items:center; color:#e5e7eb; font-weight:700; pointer-events:none; }
-  @media (max-width: 640px){
-    .side-controls{ right:8px }
+
+  /* ===== ZOOM OVERLAY (no blur on the image itself) ===== */
+  #zoomOverlay{
+    position:fixed; inset:0; z-index:100; display:none;
+    background:rgba(0,0,0,.75);
+    cursor:grab;
   }
+  #zoomOverlay.grabbing{ cursor:grabbing; }
+  #zoomImg{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(1);
+    will-change:transform; user-select:none; -webkit-user-drag:none;
+    max-width:none; max-height:none;
+    image-rendering:auto; /* חדות רגילה */
+  }
+  .zoom-controls{
+    position:fixed; right:12px; bottom:12px; z-index:101; display:flex; gap:8px;
+  }
+  .zoom-controls .btn{ background:rgba(255,255,255,.2) }
 </style>
 </head>
 <body>
 
 <header>
   <div class="brand">Ukraine War Updates</div>
-  <div class="hint">טיפ: ← / → לניווט בין תאריכים</div>
+  <div class="hint">טיפ: ← / → לניווט בין תאריכים • לחצו 🔍 להגדלה</div>
 </header>
 
 <!-- ===== HOME ===== -->
@@ -133,10 +144,11 @@
   </div>
 
   <!-- פס הבקרה הימני -->
-  <div class="side-controls" id="sideControls" aria-label="בקרת ניווט">
+  <div class="side-controls" aria-label="בקרת ניווט">
     <button class="btn home" id="homeBtn" title="חזרה לבית">בית</button>
-    <button class="btn big" id="prevBtn" title="עדכון קודם" aria-label="עדכון קודם">⟵</button>
-    <button class="btn big" id="nextBtn" title="עדכון הבא" aria-label="עדכון הבא">⟶</button>
+    <button class="btn big"  id="prevBtn" title="עדכון קודם" aria-label="עדכון קודם">⟵</button>
+    <button class="btn big"  id="nextBtn" title="עדכון הבא" aria-label="עדכון הבא">⟶</button>
+    <button class="btn zoom" id="zoomBtn" title="הגדלת תמונה" aria-label="הגדלת תמונה">🔍</button>
   </div>
 
   <div class="caption">
@@ -144,6 +156,17 @@
     <div id="captionRight" class="status">—</div>
   </div>
 </section>
+
+<!-- ===== ZOOM OVERLAY ===== -->
+<div id="zoomOverlay">
+  <img id="zoomImg" alt="תמונה מוגדלת" />
+  <div class="zoom-controls">
+    <button class="btn" id="zoomIn">+</button>
+    <button class="btn" id="zoomOut">−</button>
+    <button class="btn" id="zoomReset">איפוס</button>
+    <button class="btn" id="zoomClose">סגור</button>
+  </div>
+</div>
 
 <script>
 /* ===== helpers ===== */
@@ -158,9 +181,11 @@ const el = {
   detail: $('detailView'),
   title: $('frontTitle'), badge: $('dateBadge'),
   img: $('frontImage'), loading: $('loading'),
-  prev: $('prevBtn'), next: $('nextBtn'), homeBtn: $('homeBtn'),
+  prev: $('prevBtn'), next: $('nextBtn'), homeBtn: $('homeBtn'), zoomBtn: $('zoomBtn'),
   capLeft: $('captionLeft'), capRight: $('captionRight'),
-  stage: $('stage')
+  stage: $('stage'),
+  zoomOverlay: $('zoomOverlay'), zoomImg: $('zoomImg'),
+  zoomIn: $('zoomIn'), zoomOut: $('zoomOut'), zoomReset: $('zoomReset'), zoomClose: $('zoomClose')
 };
 
 function showHome(){ history.replaceState({},'',location.pathname); el.detail.style.display='block'; el.home.style.display='block'; el.detail.style.display='none'; }
@@ -173,15 +198,12 @@ function rawUrl(path){ const {owner,repo,branch}=CFG.repo; return `https://raw.g
 async function ghList(path){
   const {owner,repo,branch}=CFG.repo;
   const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
-  const res = await fetch(url,{headers:{'Accept':'application/vnd.github+json'}});
-  if(!res.ok) throw new Error('GitHub API '+res.status);
+  const res = await fetch(url,{headers:{'Accept':'application/vnd.github+json'}}); if(!res.ok) throw new Error('GitHub API '+res.status);
   return res.json();
 }
 function extractDateFromFilename(name){
   const m = name.toLowerCase().match(/-(\d{4})-(\d{1,2})-(\d{1,2})\.(png|jpe?g|webp)$/i);
-  if(!m) return null;
-  const d = new Date(+m[1], +m[2]-1, +m[3]);
-  return isNaN(+d)?null:d;
+  if(!m) return null; const d = new Date(+m[1], +m[2]-1, +m[3]); return isNaN(+d)?null:d;
 }
 async function loadFrontFiles(frontKey){
   const base = `${CFG.repo.basePath}/${frontKey}`;
@@ -225,8 +247,7 @@ function renderDetail(){
   if(!files.length){
     el.badge.textContent='—';
     el.capLeft.textContent=`אין קבצים ב-${key} בפורמט front-YYYY-M-D`;
-    setStageBg(''); setImgError('לא נמצאו תמונות');
-    return;
+    setStageBg(''); setImgError('לא נמצאו תמונות'); return;
   }
 
   const item = files[idx];
@@ -242,6 +263,10 @@ function renderDetail(){
     el.capRight.className='status ok';
     el.capRight.textContent='נטען בהצלחה';
     setLoading(false);
+
+    // הכנה להגדלה: נטעין לאוברליי את אותה כתובת
+    el.zoomImg.src = item.url;
+    resetZoom();
   };
   probe.onerror = ()=> { setStageBg(''); setImgError('שגיאה בטעינת התמונה'); };
   probe.referrerPolicy="no-referrer";
@@ -265,7 +290,56 @@ function step(delta){
 el.prev.addEventListener('click', ()=>step(-1));
 el.next.addEventListener('click', ()=>step(+1));
 document.addEventListener('keydown', (e)=>{ if(el.detail.style.display!=='block') return; if(e.key==='ArrowLeft') step(-1); if(e.key==='ArrowRight') step(+1); });
-document.getElementById('homeBtn').addEventListener('click', showHome);
+el.homeBtn.addEventListener('click', showHome);
+
+/* ===== ZOOM (no blur) ===== */
+let zScale=1, zX=0, zY=0, dragging=false, lastX=0, lastY=0;
+
+function applyZoom(){
+  el.zoomImg.style.transform = `translate(calc(-50% + ${zX}px), calc(-50% + ${zY}px)) scale(${zScale})`;
+}
+function resetZoom(){
+  zScale = 1; zX=0; zY=0; applyZoom();
+}
+function openZoom(){
+  el.zoomOverlay.style.display='block';
+}
+function closeZoom(){
+  el.zoomOverlay.style.display='none';
+}
+el.zoomBtn.addEventListener('click', openZoom);
+el.zoomClose.addEventListener('click', closeZoom);
+el.zoomReset.addEventListener('click', resetZoom);
+el.zoomIn.addEventListener('click', ()=>{ zScale = Math.min(8, zScale*1.25); applyZoom(); });
+el.zoomOut.addEventListener('click', ()=>{ zScale = Math.max(1, zScale/1.25); applyZoom(); });
+
+// גלגלת – זום סביב מרכז המסך (פשוט ויעיל)
+el.zoomOverlay.addEventListener('wheel', (e)=>{
+  e.preventDefault();
+  const dir = e.deltaY > 0 ? -1 : 1;
+  const prev = zScale;
+  zScale = Math.min(8, Math.max(1, zScale * (dir>0 ? 1.1 : 1/1.1)));
+  // תזוזה קלה כדי להרגיש זום – לא מדויק לנקודת הסמן אבל נח
+  const factor = zScale/prev;
+  zX *= factor; zY *= factor;
+  applyZoom();
+},{passive:false});
+
+// גרירה
+el.zoomOverlay.addEventListener('pointerdown', (e)=>{ dragging=true; el.zoomOverlay.classList.add('grabbing'); lastX=e.clientX; lastY=e.clientY; });
+el.zoomOverlay.addEventListener('pointermove', (e)=>{
+  if(!dragging) return;
+  zX += (e.clientX - lastX);
+  zY += (e.clientY - lastY);
+  lastX = e.clientX; lastY = e.clientY;
+  applyZoom();
+});
+['pointerup','pointerleave','pointercancel'].forEach(ev=> el.zoomOverlay.addEventListener(ev, ()=>{ dragging=false; el.zoomOverlay.classList.remove('grabbing'); }));
+
+// דאבל-קליק: טוגל 1x / 2x
+el.zoomOverlay.addEventListener('dblclick', ()=>{
+  zScale = (zScale===1) ? 2 : 1; zX=0; zY=0; applyZoom();
+});
 
 /* ===== INIT ===== */
 (async function init(){
