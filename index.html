@@ -3,155 +3,57 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>עדכוני חזיתות — אוקראינה</title>
-  <meta name="description" content="מציג תמונות יומיות לכל גזרת לחימה מתוך GitHub, עם ניווט כרונולוגי." />
-
-  <!-- סגנון בסיסי קליל; אפשר להחליף ל-Tailwind בהמשך -->
+  <title>Ukraine War Updates — מפות עדכונים</title>
+  <meta name="description" content="מציג עדכון אחרון מכל חזית עם ניווט כרונולוגי מתוך תיקיות images/<front> ב-GitHub." />
   <style>
     :root{
-      /* שים כאן קישור למפת הרקע (אפשר קובץ מקומי /assets/ua-map.jpg או קישור RAW מגיטהאב) */
-      --map-url: url("assets/ukraine-map-lite.jpg");
+      --map-url: url("assets/ukraine-map-lite.jpg"); /* עדכן אם תרצה */
       --bg-blur: 8px;
-      --brand: #0b6bcb;
-      --brand-2: #0d3b66;
-      --ink: #0f172a;
-      --ink-soft: #334155;
-      --panel: rgba(255,255,255,.9);
-      --panel-weak: rgba(255,255,255,.6);
-      --danger: #dc2626;
-      --ok: #059669;
+      --brand: #0b6bcb; --brand-2:#0d3b66;
+      --ink:#0f172a; --ink-soft:#334155;
+      --panel: rgba(255,255,255,.9); --panel-weak: rgba(255,255,255,.6);
     }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0; padding: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
-      color: var(--ink);
-      background: #f1f5f9;
-    }
-    .app {
-      min-height: 100dvh;
-      position: relative;
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-    }
-    .hero {
-      position: relative;
-      min-height: 40vh;
-      background-image: var(--map-url);
-      background-size: cover;
-      background-position: center;
-      filter: saturate(0.9);
-      isolation: isolate;
-    }
-    .hero::after{
-      content:"";
-      position: absolute; inset: 0;
-      backdrop-filter: blur(var(--bg-blur));
-      background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.75) 40%, rgba(255,255,255,.9));
-      z-index: 0;
-    }
-    header {
-      position: relative; z-index: 1;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 16px clamp(12px, 3vw, 32px);
-    }
-    .brand {
-      display: flex; align-items: baseline; gap: .5rem;
-      font-weight: 700; letter-spacing: .3px;
-    }
-    .brand .dot { color: var(--brand); }
-    .tabs {
-      position: relative; z-index: 1;
-      display: flex; flex-wrap: wrap; gap: 8px;
-      padding: 0 clamp(12px, 3vw, 32px) 16px;
-    }
-    .tab {
-      border: 1px solid #e2e8f0; background: var(--panel);
-      border-radius: 999px; padding: 8px 14px;
-      font-size: 14px; cursor: pointer; user-select: none;
-      transition: all .15s ease;
-    }
-    .tab:hover { transform: translateY(-1px); }
-    .tab.active { background: #eaf3ff; border-color: #c7dcff; color: var(--brand-2); font-weight: 700; }
-
-    main {
-      position: relative; z-index: 1;
-      padding: 16px clamp(12px, 3vw, 32px) 28px;
-      display: grid; gap: 16px;
-    }
-    .panel {
-      background: var(--panel); border: 1px solid #e2e8f0; border-radius: 16px;
-      padding: clamp(10px, 2vw, 18px);
-      box-shadow: 0 10px 26px rgba(2, 6, 23, 0.04);
-    }
-    .toolbar {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-    }
-    .toolbar .title {
-      display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; font-weight: 700;
-      color: var(--ink);
-    }
-    .date-badge {
-      background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe;
-      padding: 4px 10px; border-radius: 999px; font-size: 13px;
-      display: inline-flex; align-items: center; gap: 6px;
-    }
-    .controls {
-      display: flex; align-items: center; gap: 8px;
-    }
-    button.nav {
-      border: 1px solid #e2e8f0; background: white; color: var(--ink);
-      border-radius: 12px; padding: 8px 10px; min-width: 42px;
-      cursor: pointer; transition: all .15s ease; font-weight: 700;
-    }
-    button.nav:disabled { opacity: .45; cursor: not-allowed; }
-    button.nav:hover:not(:disabled) { transform: translateY(-1px); background: #f8fafc; }
-    .img-wrap {
-      position: relative; width: 100%; aspect-ratio: 16/9; overflow: hidden; border-radius: 14px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-    }
-    .img-wrap img {
-      width: 100%; height: 100%; object-fit: contain; display: block; background: #0b0b0b;
-    }
-    .caption {
-      font-size: 13px; color: var(--ink-soft);
-      display: flex; justify-content: space-between; gap: 8px; margin-top: 6px;
-      align-items: center; flex-wrap: wrap;
-    }
-    .status {
-      font-size: 12px; padding: 4px 8px; border-radius: 8px; border: 1px solid #e2e8f0; background: var(--panel-weak);
-    }
-    .status.ok { border-color: #bbf7d0; background: #ecfdf5; color: #065f46; }
-    .status.err { border-color: #fecaca; background: #fef2f2; color: #7f1d1d; }
-    .loading {
-      position: absolute; inset: 0; display: grid; place-items: center;
-      background: repeating-linear-gradient( 45deg, rgba(255,255,255,.0) 0 24px, rgba(255,255,255,.5) 24px 48px );
-      animation: pulse 1.2s ease-in-out infinite;
-    }
-    @keyframes pulse { 0%{opacity:.6} 50%{opacity:1} 100%{opacity:.6} }
-    footer {
-      padding: 14px clamp(12px, 3vw, 32px); color: #475569; font-size: 12px; display:flex; justify-content: space-between; flex-wrap: wrap; gap:8px;
-    }
-    a{ color: var(--brand-2); text-decoration: none; }
-    a:hover{ text-decoration: underline; }
-    .sr { position: absolute !important; height: 1px; width: 1px; overflow: hidden; clip: rect(1px, 1px, 1px, 1px); white-space: nowrap; }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:#f1f5f9;color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Arial}
+    .app{min-height:100dvh;display:grid;grid-template-rows:auto 1fr auto}
+    .hero{min-height:40vh;background-image:var(--map-url);background-size:cover;background-position:center;position:relative;isolation:isolate}
+    .hero::after{content:"";position:absolute;inset:0;backdrop-filter:blur(var(--bg-blur));background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.75) 40%,rgba(255,255,255,.9))}
+    header{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:16px clamp(12px,3vw,32px)}
+    .brand{display:flex;gap:.5rem;align-items:baseline;font-weight:700}
+    .brand .dot{color:var(--brand)}
+    .tabs{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:8px;padding:0 clamp(12px,3vw,32px) 16px}
+    .tab{border:1px solid #e2e8f0;background:var(--panel);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer;user-select:none;transition:.15s}
+    .tab:hover{transform:translateY(-1px)}
+    .tab.active{background:#eaf3ff;border-color:#c7dcff;color:var(--brand-2);font-weight:700}
+    main{position:relative;z-index:1;padding:16px clamp(12px,3vw,32px) 28px;display:grid;gap:16px}
+    .panel{background:var(--panel);border:1px solid #e2e8f0;border-radius:16px;padding:clamp(10px,2vw,18px);box-shadow:0 10px 26px rgba(2,6,23,.04)}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .title{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;font-weight:700}
+    .date-badge{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;padding:4px 10px;border-radius:999px;font-size:13px;display:inline-flex;gap:6px;align-items:center}
+    .controls{display:flex;gap:8px;align-items:center}
+    button.nav{border:1px solid #e2e8f0;background:#fff;color:var(--ink);border-radius:12px;padding:8px 10px;min-width:42px;cursor:pointer;transition:.15s;font-weight:700}
+    button.nav:disabled{opacity:.45;cursor:not-allowed}
+    button.nav:hover:not(:disabled){transform:translateY(-1px);background:#f8fafc}
+    .img-wrap{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:14px;background:#0b0b0b;border:1px solid #e2e8f0}
+    .img-wrap img{width:100%;height:100%;object-fit:contain;display:block}
+    .caption{font-size:13px;color:var(--ink-soft);display:flex;justify-content:space-between;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap}
+    .status{font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid #e2e8f0;background:var(--panel-weak)}
+    .status.ok{border-color:#bbf7d0;background:#ecfdf5;color:#065f46}
+    .status.err{border-color:#fecaca;background:#fef2f2;color:#7f1d1d}
+    .loading{position:absolute;inset:0;display:grid;place-items:center;background:repeating-linear-gradient(45deg,rgba(255,255,255,0) 0 24px,rgba(255,255,255,.5) 24px 48px);animation:pulse 1.2s infinite}
+    @keyframes pulse{0%{opacity:.6}50%{opacity:1}100%{opacity:.6}}
+    footer{padding:14px clamp(12px,3vw,32px);color:#475569;font-size:12px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+    a{color:var(--brand-2);text-decoration:none} a:hover{text-decoration:underline}
   </style>
 </head>
 <body>
   <div class="app">
     <section class="hero">
       <header>
-        <div class="brand">
-          <span class="dot">●</span> <span>עדכוני חזיתות — אוקראינה</span>
-        </div>
-        <div class="hint" aria-hidden="true" style="font-size:12px;color:#334155">
-          קיצור דרך: ← / → לניווט תאריכים
-        </div>
+        <div class="brand"><span class="dot">●</span><span>Ukraine War Updates</span></div>
+        <div style="font-size:12px;color:#334155">טיפ: מקשי ←/→ לניווט בין תאריכים</div>
       </header>
-
-      <nav class="tabs" id="tabs" aria-label="בחירת גזרה">
-        <!-- נבנה דינמית -->
-      </nav>
+      <nav class="tabs" id="tabs" aria-label="בחירת חזית"></nav>
     </section>
 
     <main>
@@ -167,7 +69,7 @@
           </div>
         </div>
 
-        <div class="img-wrap" id="imgWrap">
+        <div class="img-wrap">
           <div class="loading" id="loading" hidden>טוען…</div>
           <img id="frontImage" alt="תמונת עדכון" />
         </div>
@@ -180,215 +82,189 @@
     </main>
 
     <footer>
-      <div>מקור התמונות: <span id="repoLinkWrap">—</span></div>
-      <div>מצב: <span class="status ok" id="appStatus">מוכן</span></div>
+      <div>Repo: <a id="repoLink" target="_blank" rel="noopener">GitHub</a></div>
+      <div>מצב: <span id="appStatus" class="status ok">מוכן</span></div>
     </footer>
   </div>
 
   <script>
-  // --------- עזרי זמן/תאריך ----------
-  const fmtDate = (iso) => {
-    try {
-      const d = new Date(iso);
-      if (isNaN(+d)) return iso;
-      return d.toLocaleDateString('he-IL', { year:'numeric', month:'2-digit', day:'2-digit' });
-    } catch { return iso; }
-  };
-
-  // --------- מצב אפליקציה ----------
+  // ===== קריאת תצורה מ-updates.json =====
   const state = {
-    data: null,                // ה-JSON הטעון
-    currentFrontKey: null,     // מפתח גזרה (למשל "pokrovsk")
-    indices: new Map(),        // מפה frontKey -> אינדקס נוכחי
+    config: null,
+    filesByFront: new Map(), // key -> [{name,path,url,date}]
+    indexByFront: new Map(),
+    currentKey: null
   };
 
-  // --------- אלמנטים ----------
-  const tabsEl       = document.getElementById('tabs');
-  const frontTitleEl = document.getElementById('frontTitle');
-  const dateBadgeEl  = document.getElementById('dateBadge');
-  const imgWrapEl    = document.getElementById('imgWrap');
-  const imgEl        = document.getElementById('frontImage');
-  const loadingEl    = document.getElementById('loading');
-  const prevBtn      = document.getElementById('prevBtn');
-  const nextBtn      = document.getElementById('nextBtn');
-  const captionLeft  = document.getElementById('captionLeft');
-  const captionRight = document.getElementById('captionRight');
-  const appStatus    = document.getElementById('appStatus');
-  const repoLinkWrap = document.getElementById('repoLinkWrap');
+  const el = {
+    tabs: document.getElementById('tabs'),
+    title: document.getElementById('frontTitle'),
+    badge: document.getElementById('dateBadge'),
+    img: document.getElementById('frontImage'),
+    loading: document.getElementById('loading'),
+    prev: document.getElementById('prevBtn'),
+    next: document.getElementById('nextBtn'),
+    capLeft: document.getElementById('captionLeft'),
+    capRight: document.getElementById('captionRight'),
+    appStatus: document.getElementById('appStatus'),
+    repoLink: document.getElementById('repoLink')
+  };
 
-  // --------- טעינת הנתונים ----------
-  async function loadUpdates() {
-    setAppStatus('טוען עדכונים…');
-    try {
-      const res = await fetch('updates.json', { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if (!data || !Array.isArray(data.fronts)) throw new Error('מבנה JSON שגוי');
-      state.data = data;
+  const fmtDate = (d) => d.toLocaleDateString('he-IL',{year:'numeric',month:'2-digit',day:'2-digit'});
 
-      // קישור לריפו בפוטר
-      if (data.repo_raw_base) {
-        const a = document.createElement('a');
-        // מציגים את repo_url אם קיים (ידידותי יותר), אחרת את repo_raw_base
-        a.href = data.repo_url || data.repo_raw_base;
-        a.target = '_blank';
-        a.rel = 'noopener';
-        a.textContent = data.repo_name || 'GitHub';
-        repoLinkWrap.innerHTML = '';
-        repoLinkWrap.appendChild(a);
-      } else {
-        repoLinkWrap.textContent = 'ללא קישור (בדוק updates.json)';
-      }
+  function setAppStatus(msg, ok=true){ el.appStatus.textContent=msg; el.appStatus.className='status '+(ok?'ok':'err'); }
+  function setLoading(on){ el.loading.hidden = !on; }
+  function setImgError(msg){ el.img.removeAttribute('src'); el.capRight.className='status err'; el.capRight.textContent=msg; setLoading(false); }
 
-      buildTabs(data.fronts);
-      // אתחול אינדקסים: ברירת מחדל לתמונה הכי עדכנית (האחרונה ברשימה)
-      for (const f of data.fronts) {
-        const idx = Math.max(0, (f.items?.length || 1) - 1);
-        state.indices.set(f.key, idx);
-      }
-
-      // תמיכת פרמטר כתובת ?front=xxx
-      const urlFront = new URL(location.href).searchParams.get('front');
-      const firstKey = urlFront && data.fronts.find(x => x.key === urlFront)?.key || data.fronts[0].key;
-      selectFront(firstKey);
-
-      setAppStatus('מוכן', true);
-    } catch (err) {
-      console.error(err);
-      setAppStatus('שגיאה בטעינת updates.json', false);
-      captionRight.className = 'status err';
-      captionRight.textContent = 'שגיאה בטעינת הנתונים';
-    }
+  function ghRepoUrl(){ const {owner,repo}=state.config.repo; return `https://github.com/${owner}/${repo}`; }
+  function rawUrl(path){
+    const {owner,repo,branch} = state.config.repo;
+    return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodeURI(path)}`;
+  }
+  async function ghList(path){
+    const {owner,repo,branch} = state.config.repo;
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
+    const res = await fetch(url,{headers:{'Accept':'application/vnd.github+json'}});
+    if(!res.ok) throw new Error(`GitHub API ${res.status}`);
+    return res.json();
   }
 
-  function setAppStatus(msg, ok = true) {
-    appStatus.textContent = msg;
-    appStatus.className = 'status ' + (ok ? 'ok' : 'err');
-  }
-
-  // --------- בניית טאבים ----------
-  function buildTabs(fronts) {
-    tabsEl.innerHTML = '';
-    fronts.forEach(f => {
-      const btn = document.createElement('button');
-      btn.className = 'tab';
-      btn.type = 'button';
-      btn.textContent = f.display || f.key;
-      btn.dataset.front = f.key;
-      btn.addEventListener('click', () => selectFront(f.key));
-      tabsEl.appendChild(btn);
+  function buildTabs(fronts){
+    el.tabs.innerHTML = '';
+    fronts.forEach(f=>{
+      const b=document.createElement('button');
+      b.className='tab';
+      b.type='button';
+      b.textContent=f.display || f.key;
+      b.dataset.key=f.key;
+      b.addEventListener('click', ()=>selectFront(f.key));
+      el.tabs.appendChild(b);
     });
   }
-
-  function markActiveTab(frontKey) {
-    [...tabsEl.querySelectorAll('.tab')].forEach(el => {
-      el.classList.toggle('active', el.dataset.front === frontKey);
-    });
+  function markActive(key){
+    [...document.querySelectorAll('.tab')].forEach(t=>t.classList.toggle('active', t.dataset.key===key));
   }
 
-  // --------- בחירת גזרה ----------
-  function selectFront(frontKey) {
-    if (!state.data) return;
-    const front = state.data.fronts.find(f => f.key === frontKey);
-    if (!front) return;
-    state.currentFrontKey = frontKey;
-    markActiveTab(frontKey);
-    render();
-    // עדכון ה-URL לשיתוף
-    const u = new URL(location.href);
-    u.searchParams.set('front', frontKey);
-    history.replaceState({}, '', u);
+  // תאריך מתוך שם קובץ בסגנון front-YYYY-M-D.xxx
+  function extractDateFromFilename(name){
+    const m = name.toLowerCase().match(/-(\d{4})-(\d{1,2})-(\d{1,2})\.(png|jpe?g|webp)$/i);
+    if(!m) return null;
+    const Y=+m[1], M=+m[2], D=+m[3];
+    const d = new Date(Y, M-1, D);
+    return isNaN(+d) ? null : d;
   }
 
-  // --------- רינדור ----------
-  function render() {
-    const front = getCurrentFront();
-    if (!front) return;
+  async function loadFrontFiles(frontKey){
+    const base = `${state.config.repo.basePath}/${frontKey}`;
+    const arr = await ghList(base);
+    const items = arr
+      .filter(x=>x.type==='file' && /\.(png|jpe?g|webp)$/i.test(x.name))
+      .map(x=>({ name:x.name, path:`${base}/${x.name}`, url: rawUrl(`${base}/${x.name}`), date: extractDateFromFilename(x.name)}))
+      .filter(x=>x.date);
+    items.sort((a,b)=> a.date - b.date);
+    state.filesByFront.set(frontKey, items);
+    state.indexByFront.set(frontKey, Math.max(0, items.length-1)); // האחרון
+  }
 
-    const idx = clampIndex(state.indices.get(front.key) ?? 0, front.items.length);
-    state.indices.set(front.key, idx);
+  function render(){
+    const fronts = state.config.fronts;
+    const front = fronts.find(f=>f.key===state.currentKey);
+    if(!front) return;
 
-    frontTitleEl.textContent = front.display || front.key;
-    const item = front.items[idx];
-    dateBadgeEl.textContent = item ? fmtDate(item.date) : '—';
+    el.title.textContent = front.display || front.key;
+    const files = state.filesByFront.get(front.key) || [];
+    const idx = Math.max(0, Math.min(state.indexByFront.get(front.key) ?? (files.length-1), files.length-1));
+    el.prev.disabled = (idx<=0);
+    el.next.disabled = (idx>=files.length-1);
 
-    // עדכון כפתורי ניווט
-    prevBtn.disabled = (idx <= 0);
-    nextBtn.disabled = (idx >= front.items.length - 1);
-
-    // כיתוב שמאל
-    captionLeft.textContent = item?.caption || (item?.filename || '');
-
-    // טעינת התמונה עם מציין "טוען…"
-    setLoading(true);
-    if (!item?.image_url) {
-      setImageError('אין image_url לנתון הזה');
+    if(!files.length){
+      el.badge.textContent='—';
+      el.capLeft.textContent=`אין קבצים ב-${front.key} או ששם הקובץ לא בפורמט front-YYYY-M-D`;
+      setImgError('לא נמצאו תמונות');
       return;
     }
 
-    const img = new Image();
-    img.onload = () => {
-      imgEl.src = item.image_url;
-      imgEl.alt = item.alt || `עדכון ${front.display} — ${fmtDate(item.date)}`;
-      captionRight.className = 'status ok';
-      captionRight.textContent = 'נטען בהצלחה';
+    const item = files[idx];
+    el.badge.textContent = fmtDate(item.date);
+    el.capLeft.textContent = item.name;
+
+    setLoading(true);
+    const probe = new Image();
+    probe.onload = ()=>{
+      el.img.src = item.url;
+      el.img.alt = `${front.display || front.key} — ${fmtDate(item.date)}`;
+      el.capRight.className='status ok';
+      el.capRight.textContent='נטען בהצלחה';
       setLoading(false);
-      // קדם-טעינה קלילה לשכנים
-      preloadNeighbors(front, idx);
+      // קדם-טעינה לשכנים
+      [idx-1, idx+1].forEach(i=>{
+        const n = files[i];
+        if(n){ const im=new Image(); im.referrerPolicy="no-referrer"; im.src=n.url; }
+      });
     };
-    img.onerror = () => setImageError('שגיאה בטעינת התמונה');
-    img.referrerPolicy = "no-referrer";
-    img.src = item.image_url;
+    probe.onerror = ()=> setImgError('שגיאה בטעינת התמונה');
+    probe.referrerPolicy="no-referrer";
+    probe.src = item.url;
   }
 
-  function setLoading(on) {
-    loadingEl.hidden = !on;
-  }
-  function setImageError(msg) {
-    imgEl.removeAttribute('src');
-    captionRight.className = 'status err';
-    captionRight.textContent = msg;
-    setLoading(false);
-  }
-  function clampIndex(i, len) {
-    if (len <= 0) return 0;
-    return Math.max(0, Math.min(i, len - 1));
-  }
-  function getCurrentFront() {
-    return state.data?.fronts.find(f => f.key === state.currentFrontKey);
-  }
-
-  // --------- ניווט ----------
-  prevBtn.addEventListener('click', () => step(-1));
-  nextBtn.addEventListener('click', () => step(+1));
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft') step(-1);
-    if (e.key === 'ArrowRight') step(+1);
-  });
-
-  function step(delta) {
-    const front = getCurrentFront();
-    if (!front) return;
-    const curr = state.indices.get(front.key) ?? 0;
-    const next = clampIndex(curr + delta, front.items.length);
-    if (next !== curr) {
-      state.indices.set(front.key, next);
+  function selectFront(key){
+    state.currentKey = key;
+    markActive(key);
+    if(!state.filesByFront.has(key)){
+      loadFrontFiles(key).then(render).catch(err=>{
+        console.error(err);
+        setAppStatus('שגיאה בטעינת GitHub API', false);
+        setImgError('שגיאה בטעינת נתונים');
+      });
+    }else{
       render();
     }
+    const u = new URL(location.href); u.searchParams.set('front', key); history.replaceState({},'',u);
   }
 
-  // --------- קדם-טעינה ----------
-  function preloadNeighbors(front, idx) {
-    const list = [];
-    if (idx + 1 < front.items.length) list.push(front.items[idx + 1].image_url);
-    if (idx - 1 >= 0) list.push(front.items[idx - 1].image_url);
-    list.filter(Boolean).forEach(url => {
-      const i = new Image(); i.referrerPolicy = "no-referrer"; i.src = url;
-    });
+  function step(delta){
+    const key = state.currentKey;
+    const files = state.filesByFront.get(key) || [];
+    if(!files.length) return;
+    const curr = state.indexByFront.get(key) ?? (files.length-1);
+    const next = Math.max(0, Math.min(curr+delta, files.length-1));
+    if(next!==curr){ state.indexByFront.set(key,next); render(); }
   }
 
-  // --------- התחלה ----------
-  loadUpdates();
+  el.prev.addEventListener('click', ()=>step(-1));
+  el.next.addEventListener('click', ()=>step(+1));
+  document.addEventListener('keydown', (e)=>{ if(e.key==='ArrowLeft') step(-1); if(e.key==='ArrowRight') step(+1); });
+
+  // ===== אתחול =====
+  (async function init(){
+    try{
+      setAppStatus('טוען תצורה…');
+      const res = await fetch('updates.json',{cache:'no-store'});
+      if(!res.ok) throw new Error('updates.json missing');
+      state.config = await res.json();
+
+      el.repoLink.href = ghRepoUrl();
+      buildTabs(state.config.fronts);
+
+      // בחר חזית מ-param או הראשונה
+      const urlFront = new URL(location.href).searchParams.get('front');
+      const firstKey = state.config.fronts.find(f=>f.key===urlFront)?.key || state.config.fronts[0].key;
+
+      // נטען קבצים לכל החזיתות ברקע, אבל נתחיל מהרלוונטית כדי להציג מהר
+      await loadFrontFiles(firstKey);
+      selectFront(firstKey);
+      setAppStatus('מוכן', true);
+
+      // טעינה ברקע לשאר (לפי התור, למניעת rate limit)
+      for(const f of state.config.fronts){
+        if(f.key===firstKey) continue;
+        try{ await loadFrontFiles(f.key); }catch(_e){}
+      }
+    }catch(err){
+      console.error(err);
+      setAppStatus('שגיאה בטעינת תצורה', false);
+    }
+  })();
   </script>
 </body>
 </html>
