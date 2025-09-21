@@ -7,15 +7,15 @@
   },
   "homeMap": "assets/ukraine-map.jpg",
   "fronts": [
-    { "key": "dobropillia",     "display": "dobropillia" },
-    { "key": "kharkiv",         "display": "kharkiv" },
-    { "key": "kostyantynivka",  "display": "kostyantynivka" },
-    { "key": "kupyansk",        "display": "kupyansk" },
-    { "key": "lyman",           "display": "lyman" },
-    { "key": "orikhiv",         "display": "orikhiv" },
-    { "key": "pokrovsk",        "display": "pokrovsk" },
-    { "key": "stepnohorsk",     "display": "stepnohorsk" },
-    { "key": "sumy",            "display": "sumy" },
-    { "key": "zaporizhzhia",    "display": "zaporizhzhia" }
+    { "key": "dobropillia",    "display": "דוברופיליה" },
+    { "key": "kharkiv",        "display": "חרקיב" },
+    { "key": "kostyantynivka", "display": "קוסטיאנטיניבקה" },
+    { "key": "kupyansk",       "display": "קופיאנסק" },
+    { "key": "lyman",          "display": "לימאן" },
+    { "key": "orikhiv",        "display": "אוריחיב" },
+    { "key": "pokrovsk",       "display": "פוקרובסק" },
+    { "key": "stepnohorsk",    "display": "סטפנוהורסק" },
+    { "key": "sumy",           "display": "סומי" },
+    { "key": "zaporizhzhia",   "display": "זפוריז׳יה" }
   ]
 }
