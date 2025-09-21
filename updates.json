@@ -1,7 +1,20 @@
 {
-  "updates": [
-    { "date": "2025-09-04", "file": "update 4-9-25.json" },
-    { "date": "2025-09-05", "file": "update 5-9-25.json" },
-    { "date": "2025-09-06", "file": "update 6-9-25.json" }
+  "repo": {
+    "owner": "mtsyevgeni-source",
+    "repo": "war-update",
+    "branch": "main",
+    "basePath": "images"
+  },
+  "fronts": [
+    { "key": "dobropillia",     "display": "dobropillia" },
+    { "key": "kharkiv",         "display": "kharkiv" },
+    { "key": "kostyantynivka",  "display": "kostyantynivka" },
+    { "key": "kupyansk",        "display": "kupyansk" },
+    { "key": "lyman",           "display": "lyman" },
+    { "key": "orikhiv",         "display": "orikhiv" },
+    { "key": "pokrovsk",        "display": "pokrovsk" },
+    { "key": "stepnohorsk",     "display": "stepnohorsk" },
+    { "key": "sumy",            "display": "sumy" },
+    { "key": "zaporizhzhia",    "display": "zaporizhzhia" }
   ]
 }
