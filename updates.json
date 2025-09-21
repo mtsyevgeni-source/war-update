@@ -5,6 +5,7 @@
     "branch": "main",
     "basePath": "images"
   },
+  "homeMap": "assets/ukraine-map.jpg",
   "fronts": [
     { "key": "dobropillia",     "display": "dobropillia" },
     { "key": "kharkiv",         "display": "kharkiv" },
