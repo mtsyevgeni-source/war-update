@@ -4,44 +4,35 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Ukraine War Updates</title>
-<meta name="description" content="דף בית עם חזיתות על מפה, ותצוגת עדכון במסך מלא עם ניווט חיצים." />
+<meta name="description" content="דף בית על מפת אוקראינה ותצוגת עדכוני חזית במסך מלא עם ניווט חיצים.">
 <style>
   :root{
-    --ink:#0f172a; --ink2:#334155; --brand:#0b6bcb; --brand2:#0d3b66;
-    --panel: rgba(255,255,255,.92); --panel-soft: rgba(255,255,255,.75);
-    --ring:#c7dcff;
-    --hdr: 56px; /* גובה סרגל עליון */
+    --ink:#0f172a; --ink2:#334155; --brand:#0b6bcb; --ring:#c7dcff;
+    --panel: rgba(255,255,255,.92);
+    --hdr: 56px;                  /* גובה ההדר הקבוע */
   }
   *{box-sizing:border-box}
-  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Arial;color:var(--ink);background:#f1f5f9;overflow:hidden}
+  html,body{
+    height:100%; margin:0;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Arial;
+    color:var(--ink); background:#f1f5f9; overflow:hidden; /* לא לגלול דף; הכל בתוך תצוגות */
+  }
 
   /* ===== HEADER ===== */
   header{
-    position:fixed; inset-inline:0; top:0; z-index:30;
-    height:var(--hdr);
+    position:fixed; inset-inline:0; top:0; z-index:30; height:var(--hdr);
     display:flex; align-items:center; justify-content:space-between;
     padding:0 clamp(12px,3vw,28px);
-    background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.75));
+    background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.78));
     backdrop-filter:saturate(1.1) blur(6px); border-bottom:1px solid #e2e8f0;
   }
-  .brand{display:flex; gap:.5rem; align-items:baseline; font-weight:800}
-  .brand .dot{color:var(--brand)}
+  .brand{font-weight:800}
   .hint{font-size:12px; color:var(--ink2)}
 
   /* ===== HOME VIEW ===== */
-  #homeView{
-    position:fixed; inset:var(--hdr) 0 0 0; /* מלא מסך מתחת להדר */
-    display:block;
-  }
-  .home-bg{
-    position:absolute; inset:0; z-index:0;
-    background-size:cover; background-position:center;
-  }
-  .home-overlay{
-    position:absolute; inset:0; z-index:1;
-    backdrop-filter:blur(6px);
-    background:linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,.88));
-  }
+  #homeView{ position:fixed; inset:var(--hdr) 0 0 0; display:block; }
+  .home-bg{ position:absolute; inset:0; z-index:0; background-size:cover; background-position:center; }
+  .home-glass{ position:absolute; inset:0; z-index:1; backdrop-filter:blur(6px); background:linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,.88)); }
   .home-inner{
     position:relative; z-index:2; height:100%;
     padding:18px clamp(12px,3vw,28px);
@@ -57,51 +48,47 @@
     border:1px solid #e2e8f0; border-radius:16px; padding:14px;
     background:var(--panel); box-shadow:0 10px 26px rgba(2,6,23,.05);
     transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-    display:flex; align-items:center; justify-content:center; text-align:center;
-    font-weight:700;
+    text-align:center; font-weight:700;
   }
   .front-card:hover{ transform:translateY(-2px); border-color:var(--ring); box-shadow:0 12px 30px rgba(11,107,203,.08) }
   .front-card small{ display:block; margin-top:6px; color:var(--ink2); font-weight:500 }
 
   /* ===== DETAIL VIEW (FULLSCREEN) ===== */
-  #detailView{
-    position:fixed; inset:var(--hdr) 0 0 0; display:none; background:#000; color:#fff;
-  }
-  .detail-toolbar{
+  #detailView{ position:fixed; inset:var(--hdr) 0 0 0; display:none; }
+  .detail-ui{
     position:fixed; top:0; inset-inline:0; height:var(--hdr); z-index:40;
     display:flex; align-items:center; justify-content:space-between; gap:10px;
     padding:0 clamp(10px,3vw,18px);
-    background:linear-gradient(180deg, rgba(0,0,0,.78), rgba(0,0,0,.35));
-    color:#e5e7eb; border-bottom:1px solid rgba(255,255,255,.1);
+    color:#fff; background:linear-gradient(180deg, rgba(0,0,0,.75), rgba(0,0,0,.35));
+    border-bottom:1px solid rgba(255,255,255,.12);
   }
-  .detail-left{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
   .title{font-weight:800}
   .date-badge{background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); padding:4px 10px; border-radius:999px; font-size:13px}
   .controls{display:flex; gap:8px}
-  button.nav, .home-btn{
+  .btn{
     border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.1); color:#fff;
-    border-radius:10px; padding:8px 12px; cursor:pointer; font-weight:800;
-    transition:filter .12s ease; min-width:44px
+    border-radius:10px; padding:8px 12px; cursor:pointer; font-weight:800; min-width:44px;
   }
-  button.nav:disabled{opacity:.5; cursor:not-allowed}
-  button.nav:hover:not(:disabled), .home-btn:hover{ filter:brightness(1.15) }
+  .btn:disabled{opacity:.5; cursor:not-allowed}
 
-  /* במה = כל המסך (בלי ההדר) */
+  /* במה = תמונת העדכון במסך מלא + רקע מטושטש מאותה תמונה */
   .stage{
-    position:fixed; top:var(--hdr); left:0; right:0; bottom:0;
-    display:grid; place-items:center; background:#000;
+    position:fixed; top:var(--hdr); left:0; right:0; bottom:0; overflow:hidden;
+    display:grid; place-items:center;
+    background:#000; background-size:cover; background-position:center; /* נקבע דינמית */
+  }
+  .stage::before{
+    content:""; position:absolute; inset:0; z-index:0;
+    backdrop-filter: blur(18px) saturate(1.05); opacity:.9;
   }
   .stage img{
+    position:relative; z-index:1;
     width:100vw; height:calc(100vh - var(--hdr));
-    object-fit:contain; display:block; background:#000;
+    object-fit:contain; display:block; background:transparent;
   }
-  .loading{
-    position:absolute; inset:0; display:grid; place-items:center;
-    color:#e5e7eb; font-weight:700;
-    background:transparent;
-  }
+
   .caption{
-    position:fixed; bottom:10px; inset-inline:10px;
+    position:fixed; bottom:10px; inset-inline:10px; z-index:41;
     display:flex; justify-content:space-between; align-items:center; gap:8px;
     color:#e5e7eb; font-size:13px;
     background:linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.45));
@@ -110,19 +97,21 @@
   .status{ border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.12); padding:4px 8px; border-radius:8px; }
   .status.ok{ color:#bbf7d0; border-color:#bbf7d0; }
   .status.err{ color:#fecaca; border-color:#fecaca; }
+
+  .loading{ position:fixed; inset:var(--hdr) 0 0 0; display:grid; place-items:center; color:#e5e7eb; font-weight:700; pointer-events:none; }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="brand"><span class="dot">●</span><span>Ukraine War Updates</span></div>
+  <div class="brand">Ukraine War Updates</div>
   <div class="hint">טיפ: ← / → לניווט בין תאריכים</div>
 </header>
 
 <!-- ===== HOME ===== -->
 <section id="homeView" aria-label="דף הבית">
   <div id="homeBg" class="home-bg"></div>
-  <div class="home-overlay"></div>
+  <div class="home-glass"></div>
   <div class="home-inner">
     <h2 style="margin:0 0 10px 0;">בחר חזית:</h2>
     <div id="frontGrid" class="front-grid"></div>
@@ -131,22 +120,23 @@
 
 <!-- ===== DETAIL ===== -->
 <section id="detailView" aria-live="polite">
-  <div class="detail-toolbar">
-    <div class="detail-left">
-      <button class="home-btn" id="homeBtn" title="חזרה לבית">בית</button>
+  <div class="detail-ui">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn" id="homeBtn" title="חזרה לבית">בית</button>
       <span class="title" id="frontTitle">—</span>
       <span class="date-badge" id="dateBadge">—</span>
     </div>
     <div class="controls">
-      <button class="nav" id="prevBtn" title="עדכון קודם">⟵</button>
-      <button class="nav" id="nextBtn" title="עדכון הבא">⟶</button>
+      <button class="btn" id="prevBtn" title="עדכון קודם">⟵</button>
+      <button class="btn" id="nextBtn" title="עדכון הבא">⟶</button>
     </div>
   </div>
 
-  <div class="stage">
+  <div class="stage" id="stage">
     <div class="loading" id="loading" hidden>טוען…</div>
     <img id="frontImage" alt="עדכון חזית" />
   </div>
+
   <div class="caption">
     <div id="captionLeft">—</div>
     <div id="captionRight" class="status">—</div>
@@ -155,36 +145,42 @@
 
 <script>
 /* ===== helpers ===== */
-const fmtDate = (d)=> d.toLocaleDateString('he-IL',{year:'numeric',month:'2-digit',day:'2-digit'});
-const $ = (id)=>document.getElementById(id);
+const fmtDate = d => d.toLocaleDateString('he-IL',{year:'numeric',month:'2-digit',day:'2-digit'});
+const $ = id => document.getElementById(id);
 
 /* ===== state & elements ===== */
 let CFG=null;
 const state = { filesByFront:new Map(), indexByFront:new Map(), currentKey:null };
-const els = {
+const el = {
   home: $('homeView'), grid: $('frontGrid'), homeBg: $('homeBg'),
   detail: $('detailView'), homeBtn: $('homeBtn'),
   title: $('frontTitle'), badge: $('dateBadge'),
   img: $('frontImage'), loading: $('loading'),
   prev: $('prevBtn'), next: $('nextBtn'),
-  capLeft: $('captionLeft'), capRight: $('captionRight')
+  capLeft: $('captionLeft'), capRight: $('captionRight'),
+  stage: $('stage')
 };
 
-function showHome(){ history.replaceState({},'',location.pathname); els.detail.style.display='none'; els.home.style.display='block'; }
-function showDetail(){ els.home.style.display='none'; els.detail.style.display='block'; }
-function setLoading(on){ els.loading.hidden = !on; }
-function setImgError(msg){ els.img.removeAttribute('src'); els.capRight.className='status err'; els.capRight.textContent=msg; setLoading(false); }
+function showHome(){ history.replaceState({},'',location.pathname); el.detail.style.display='none'; el.home.style.display='block'; }
+function showDetail(){ el.home.style.display='none'; el.detail.style.display='block'; }
+function setLoading(on){ el.loading.hidden = !on; }
+function setImgError(msg){ el.img.removeAttribute('src'); el.capRight.className='status err'; el.capRight.textContent=msg; setLoading(false); }
 
 /* ===== GitHub I/O ===== */
 function rawUrl(path){ const {owner,repo,branch}=CFG.repo; return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodeURI(path)}`; }
 async function ghList(path){
   const {owner,repo,branch}=CFG.repo;
-  const url=`https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
-  const res=await fetch(url,{headers:{'Accept':'application/vnd.github+json'}}); if(!res.ok) throw new Error('GitHub API '+res.status); return res.json();
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
+  const res = await fetch(url,{headers:{'Accept':'application/vnd.github+json'}});
+  if(!res.ok) throw new Error('GitHub API '+res.status);
+  return res.json();
 }
 function extractDateFromFilename(name){
+  // <front>-YYYY-M-D.ext  (M/D יכולים להיות ספרה אחת)
   const m = name.toLowerCase().match(/-(\d{4})-(\d{1,2})-(\d{1,2})\.(png|jpe?g|webp)$/i);
-  if(!m) return null; const d = new Date(+m[1], +m[2]-1, +m[3]); return isNaN(+d)?null:d;
+  if(!m) return null;
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  return isNaN(+d)?null:d;
 }
 async function loadFrontFiles(frontKey){
   const base = `${CFG.repo.basePath}/${frontKey}`;
@@ -195,28 +191,28 @@ async function loadFrontFiles(frontKey){
     .filter(x=>x.date)
     .sort((a,b)=> a.date - b.date);
   state.filesByFront.set(frontKey, items);
-  state.indexByFront.set(frontKey, Math.max(0, items.length-1)); // האחרון
+  state.indexByFront.set(frontKey, Math.max(0, items.length-1)); // האחרון כברירת מחדל
 }
 
 /* ===== UI build ===== */
 function buildHome(){
-  els.grid.innerHTML='';
+  el.grid.innerHTML='';
   CFG.fronts.forEach(f=>{
     const card=document.createElement('button');
     card.className='front-card'; card.type='button';
     card.innerHTML = `<div>${f.display || f.key}<small>${f.key}</small></div>`;
     card.addEventListener('click', ()=>openFront(f.key));
-    els.grid.appendChild(card);
+    el.grid.appendChild(card);
   });
-  // רקע מפה
-  if (CFG.homeMap){
-    els.homeBg.style.backgroundImage = `url("${CFG.homeMap}")`;
+  // מפה כרקע
+  if (CFG.homeMap) {
+    el.homeBg.style.backgroundImage = `url("${CFG.homeMap}")`;
   } else {
-    // רקע חלופי עדין אם אין מפה
-    els.homeBg.style.background = 'linear-gradient(135deg,#eef2ff,#e2e8f0)';
+    el.homeBg.style.background = 'linear-gradient(135deg,#eef2ff,#e2e8f0)';
   }
 }
-function markArrows(idx,len){ els.prev.disabled=(idx<=0); els.next.disabled=(idx>=len-1); }
+function markArrows(idx,len){ el.prev.disabled=(idx<=0); el.next.disabled=(idx>=len-1); }
+function setStageBg(url){ el.stage.style.backgroundImage = url ? `url("${url}")` : ''; }
 function renderDetail(){
   const key = state.currentKey;
   const meta = CFG.fronts.find(x=>x.key===key);
@@ -226,29 +222,30 @@ function renderDetail(){
   markArrows(idx, files.length);
 
   document.title = `${meta.display || key} — Ukraine War Updates`;
-  els.title.textContent = meta.display || meta.key;
+  el.title.textContent = meta.display || meta.key;
 
   if(!files.length){
-    els.badge.textContent='—';
-    els.capLeft.textContent=`אין קבצים ב-${key} בפורמט front-YYYY-M-D`;
-    setImgError('לא נמצאו תמונות');
+    el.badge.textContent='—';
+    el.capLeft.textContent=`אין קבצים ב-${key} בפורמט front-YYYY-M-D`;
+    setStageBg(''); setImgError('לא נמצאו תמונות');
     return;
   }
 
   const item = files[idx];
-  els.badge.textContent = fmtDate(item.date);
-  els.capLeft.textContent = item.name;
+  el.badge.textContent = fmtDate(item.date);
+  el.capLeft.textContent = item.name;
 
   setLoading(true);
   const probe = new Image();
   probe.onload = ()=>{
-    els.img.src = item.url;
-    els.img.alt = `${meta.display || key} — ${fmtDate(item.date)}`;
-    els.capRight.className='status ok';
-    els.capRight.textContent='נטען בהצלחה';
+    setStageBg(item.url);                 // רקע מטושטש ממלא מסך
+    el.img.src = item.url;                // התמונה עצמה (contain)
+    el.img.alt = `${meta.display || key} — ${fmtDate(item.date)}`;
+    el.capRight.className='status ok';
+    el.capRight.textContent='נטען בהצלחה';
     setLoading(false);
   };
-  probe.onerror = ()=> setImgError('שגיאה בטעינת התמונה');
+  probe.onerror = ()=> { setStageBg(''); setImgError('שגיאה בטעינת התמונה'); };
   probe.referrerPolicy="no-referrer";
   probe.src=item.url;
 }
@@ -261,16 +258,16 @@ async function openFront(key){
   showDetail(); renderDetail();
 }
 function step(delta){
-  const key = state.currentKey, files = state.filesByFront.get(key) || [];
+  const key=state.currentKey, files=state.filesByFront.get(key) || [];
   if(!files.length) return;
-  const curr = state.indexByFront.get(key) ?? (files.length-1);
-  const next = Math.max(0, Math.min(curr+delta, files.length-1));
+  const curr=state.indexByFront.get(key) ?? (files.length-1);
+  const next=Math.max(0, Math.min(curr+delta, files.length-1));
   if(next!==curr){ state.indexByFront.set(key,next); renderDetail(); }
 }
-els.prev.addEventListener('click', ()=>step(-1));
-els.next.addEventListener('click', ()=>step(+1));
-document.addEventListener('keydown', (e)=>{ if(els.detail.style.display!=='block') return; if(e.key==='ArrowLeft') step(-1); if(e.key==='ArrowRight') step(+1); });
-els.homeBtn.addEventListener('click', showHome);
+el.prev.addEventListener('click', ()=>step(-1));
+el.next.addEventListener('click', ()=>step(+1));
+document.addEventListener('keydown', (e)=>{ if(el.detail.style.display!=='block') return; if(e.key==='ArrowLeft') step(-1); if(e.key==='ArrowRight') step(+1); });
+el.homeBtn.addEventListener('click', showHome);
 
 /* ===== init ===== */
 (async function init(){
@@ -280,12 +277,12 @@ els.homeBtn.addEventListener('click', showHome);
     CFG = await res.json();
     buildHome();
     showHome();
-    // תמיכה בפתיחה ישירה עם ?front=
+    // פתיחה ישירה עם ?front=
     const urlFront = new URL(location.href).searchParams.get('front');
     if(urlFront && CFG.fronts.find(f=>f.key===urlFront)){ await openFront(urlFront); }
   }catch(err){
     console.error(err);
-    alert('שגיאה בטעינת התצורה. בדוק updates.json ושיוך המפה.');
+    alert('שגיאה בטעינת התצורה. ודא שקיים updates.json תקין וקובץ מפה ב-assets.');
   }
 })();
 </script>
