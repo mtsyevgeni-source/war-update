@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Ukraine War Updates</title>
-<meta name="description" content="דף בית על מפת אוקראינה ותצוגת עדכוני חזית במסך מלא עם ניווט וחלון הגדלה רציף.">
+<meta name="description" content="דף בית על מפת אוקראינה עם טור חזיתות מצפון לדרום; תצוגת עדכון במסך מלא עם ניווט והגדלה רציפה.">
 <style>
   :root{
     --ink:#0f172a; --ink2:#334155; --ring:#c7dcff;
@@ -25,22 +25,37 @@
   .brand{font-weight:800}
   .hint{font-size:12px; color:var(--ink2)}
 
-  /* HOME */
+  /* ==== HOME (map + right sidebar column) ==== */
   #homeView{ position:fixed; inset:var(--hdr) 0 0 0; display:block; }
   .home-bg{ position:absolute; inset:0; z-index:0; background-size:cover; background-position:center; }
-  .home-glass{ position:absolute; inset:0; z-index:1; backdrop-filter:blur(6px); background:linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,.88)); }
-  .home-inner{ position:relative; z-index:2; height:100%; padding:18px clamp(12px,3vw,28px); display:grid; grid-template-rows:auto 1fr; }
-  .front-grid{ align-self:start; display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); }
-  .front-card{
-    cursor:pointer; user-select:none; border:1px solid #e2e8f0; border-radius:16px; padding:14px;
-    background:var(--panel); box-shadow:0 10px 26px rgba(2,6,23,.05);
-    transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-    text-align:center; font-weight:700;
+  .home-glass{ position:absolute; inset:0; z-index:1; background:linear-gradient(180deg, rgba(255,255,255,.35), rgba(255,255,255,.35)); }
+  .home-sidebar{
+    position:absolute; right:12px; top:12px; bottom:12px; z-index:2;
+    width:min(320px, 40vw);
+    display:flex; flex-direction:column; gap:12px;
+    padding:14px;
+    background:rgba(255,255,255,.9);
+    border:1px solid #e2e8f0; border-radius:18px;
+    box-shadow:0 14px 40px rgba(2,6,23,.18);
+    overflow:auto;
+    backdrop-filter:saturate(1.1) blur(3px);
   }
-  .front-card:hover{ transform:translateY(-2px); border-color:var(--ring); box-shadow:0 12px 30px rgba(11,107,203,.08) }
-  .front-card small{ display:block; margin-top:6px; color:var(--ink2); font-weight:500 }
+  .home-title{ margin:0 0 6px 0; font-size:18px; font-weight:800 }
+  .front-col{ display:flex; flex-direction:column; gap:10px; }
+  .front-card{
+    width:100%; text-align:right;
+    cursor:pointer; user-select:none;
+    border:1px solid #e2e8f0; border-radius:14px; padding:12px;
+    background:#ffffff; transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+    font-weight:700;
+  }
+  .front-card:hover{ transform:translateY(-2px); border-color:var(--ring); box-shadow:0 10px 24px rgba(11,107,203,.10) }
+  .front-sub{ display:block; margin-top:4px; color:var(--ink2); font-weight:500; font-size:12px }
+  @media (max-width: 720px){
+    .home-sidebar{ left:12px; width:auto; height:min(65vh, 520px); top:auto; }
+  }
 
-  /* DETAIL (FULLSCREEN) */
+  /* ==== DETAIL (FULLSCREEN) ==== */
   #detailView{ position:fixed; inset:var(--hdr) 0 0 0; display:none; }
   .detail-ui{
     position:fixed; top:0; inset-inline:0; height:var(--hdr); z-index:40;
@@ -52,7 +67,6 @@
   .title{font-weight:800}
   .date-badge{background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); padding:4px 10px; border-radius:999px; font-size:13px}
 
-  /* במה = תצוגת תמונה + רקע מטושטש מאותה תמונה */
   .stage{
     position:fixed; top:var(--hdr); left:0; right:0; bottom:0; overflow:hidden;
     display:grid; place-items:center;
@@ -64,7 +78,7 @@
     object-fit:contain; display:block; background:transparent;
   }
 
-  /* פס בקרה ימני קבוע */
+  /* פס בקרה ימני קבוע במסך העדכון */
   .side-controls{
     position:fixed; right:12px; top:calc(var(--hdr) + 50%); transform:translateY(-50%);
     z-index:41; display:flex; flex-direction:column; gap:10px; align-items:center;
@@ -79,7 +93,6 @@
   .btn.big{font-size:20px; line-height:1}
   .btn.zoom{font-size:18px}
 
-  /* כיתוב תחתון */
   .caption{
     position:fixed; bottom:10px; inset-inline:10px; z-index:41;
     display:flex; justify-content:space-between; align-items:center; gap:8px;
@@ -92,18 +105,10 @@
   .status.err{ color:#fecaca; border-color:#fecaca; }
   .loading{ position:fixed; inset:var(--hdr) 0 0 0; display:grid; place-items:center; color:#e5e7eb; font-weight:700; pointer-events:none; }
 
-  /* ZOOM OVERLAY (רציף, בלי reset) */
-  #zoomOverlay{
-    position:fixed; inset:0; z-index:100; display:none;
-    background:rgba(0,0,0,.75);
-    cursor:grab;
-  }
+  /* ZOOM overlay (רציף) */
+  #zoomOverlay{ position:fixed; inset:0; z-index:100; display:none; background:rgba(0,0,0,.75); cursor:grab; }
   #zoomOverlay.grabbing{ cursor:grabbing; }
-  #zoomImg{
-    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(1);
-    will-change:transform; user-select:none; -webkit-user-drag:none;
-    max-width:none; max-height:none; image-rendering:auto;
-  }
+  #zoomImg{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(1); will-change:transform; user-select:none; -webkit-user-drag:none; max-width:none; max-height:none; image-rendering:auto; }
   .zoom-controls{ position:fixed; right:12px; bottom:12px; z-index:101; display:flex; gap:8px; }
   .zoom-controls .btn{ background:rgba(255,255,255,.2) }
   @media (max-width: 640px){ .side-controls{ right:8px } }
@@ -113,20 +118,22 @@
 
 <header>
   <div class="brand">Ukraine War Updates</div>
-  <div class="hint">טיפ: ← / → לניווט בין תאריכים • 🔍 להגדלה</div>
+  <div class="hint">טיפ: לחיצה על חזית בטור הימני • ←/→ לדפדוף • 🔍 להגדלה</div>
 </header>
 
-<!-- HOME -->
+<!-- ===== HOME ===== -->
 <section id="homeView" aria-label="דף הבית">
   <div id="homeBg" class="home-bg"></div>
   <div class="home-glass"></div>
-  <div class="home-inner">
-    <h2 style="margin:0 0 10px 0;">בחר חזית:</h2>
-    <div id="frontGrid" class="front-grid"></div>
-  </div>
+
+  <!-- הטור הימני עם החזיתות -->
+  <aside class="home-sidebar" aria-label="רשימת חזיתות">
+    <h2 class="home-title">בחר חזית:</h2>
+    <div id="frontCol" class="front-col"></div>
+  </aside>
 </section>
 
-<!-- DETAIL -->
+<!-- ===== DETAIL ===== -->
 <section id="detailView" aria-live="polite">
   <div class="detail-ui">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -141,7 +148,6 @@
     <img id="frontImage" alt="עדכון חזית" />
   </div>
 
-  <!-- פס בקרה ימין -->
   <div class="side-controls" aria-label="בקרת ניווט">
     <button class="btn home" id="homeBtn" title="חזרה לבית">בית</button>
     <button class="btn big"  id="prevBtn" title="עדכון קודם" aria-label="עדכון קודם">⟵</button>
@@ -155,7 +161,7 @@
   </div>
 </section>
 
-<!-- ZOOM OVERLAY (כולל ניווט) -->
+<!-- ===== ZOOM OVERLAY ===== -->
 <div id="zoomOverlay">
   <img id="zoomImg" alt="תמונה מוגדלת" />
   <div class="zoom-controls">
@@ -176,7 +182,7 @@ const $ = id => document.getElementById(id);
 let CFG=null;
 const state = { filesByFront:new Map(), indexByFront:new Map(), currentKey:null };
 const el = {
-  home: $('homeView'), grid: $('frontGrid'), homeBg: $('homeBg'),
+  home: $('homeView'), frontCol: $('frontCol'), homeBg: $('homeBg'),
   detail: $('detailView'),
   title: $('frontTitle'), badge: $('dateBadge'),
   img: $('frontImage'), loading: $('loading'),
@@ -217,15 +223,16 @@ async function loadFrontFiles(frontKey){
   state.indexByFront.set(frontKey, Math.max(0, items.length-1));
 }
 
-/* ===== HOME ===== */
+/* ===== HOME build (column on right) ===== */
 function buildHome(){
-  el.grid.innerHTML='';
+  el.frontCol.innerHTML='';
   CFG.fronts.forEach(f=>{
-    const card=document.createElement('button');
-    card.className='front-card'; card.type='button';
-    card.innerHTML = `<div>${f.display || f.key}<small>${f.key}</small></div>`;
-    card.addEventListener('click', ()=>openFront(f.key));
-    el.grid.appendChild(card);
+    const btn=document.createElement('button');
+    btn.className='front-card';
+    btn.type='button';
+    btn.innerHTML = `${f.display || f.key}<span class="front-sub">${f.key}</span>`;
+    btn.addEventListener('click', ()=>openFront(f.key));
+    el.frontCol.appendChild(btn);
   });
   el.homeBg.style.backgroundImage = CFG.homeMap ? `url("${CFG.homeMap}")` : 'linear-gradient(135deg,#eef2ff,#e2e8f0)';
 }
@@ -264,7 +271,7 @@ function renderDetail(){
     el.capRight.textContent='נטען בהצלחה';
     setLoading(false);
 
-    // סנכרון לאוברליי — בלי reset, נשמרים scale/pan
+    // סנכרון לאוברליי (ללא reset)
     el.zoomImg.src = item.url;
   };
   probe.onerror = ()=> { setStageBg(''); setImgError('שגיאה בטעינת התמונה'); };
@@ -287,17 +294,14 @@ function step(delta){
   if(next!==curr){
     state.indexByFront.set(key,next);
     renderDetail();
-    // אם האוברליי פתוח – שמור זום קיים והחלף מקור
     if (el.zoomOverlay.style.display==='block') {
-      el.zoomImg.onload = ()=> applyZoom(); // החלת הטרנספורם אחרי הטעינה
+      el.zoomImg.onload = ()=> applyZoom();
       el.zoomImg.src = (state.filesByFront.get(key)[next] || {}).url || el.img.src;
     }
   }
 }
 el.prev.addEventListener('click', ()=>step(-1));
 el.next.addEventListener('click', ()=>step(+1));
-
-/* חיצי מקלדת, כולל אוברליי פתוח */
 document.addEventListener('keydown', (e)=>{
   if (el.detail.style.display !== 'block') return;
   if (e.key === 'Escape' && el.zoomOverlay.style.display==='block') { closeZoom(); return; }
@@ -308,45 +312,20 @@ el.homeBtn.addEventListener('click', showHome);
 
 /* ===== ZOOM (רציף) ===== */
 let zScale=1, zX=0, zY=0, dragging=false, lastX=0, lastY=0;
-function applyZoom(){
-  el.zoomImg.style.transform = `translate(calc(-50% + ${zX}px), calc(-50% + ${zY}px)) scale(${zScale})`;
-}
-function openZoom(){ el.zoomOverlay.style.display='block'; /* שומר מצב נוכחי */ }
+function applyZoom(){ el.zoomImg.style.transform = `translate(calc(-50% + ${zX}px), calc(-50% + ${zY}px)) scale(${zScale})`; }
+function openZoom(){ el.zoomOverlay.style.display='block'; }
 function closeZoom(){ el.zoomOverlay.style.display='none'; }
 el.zoomBtn.addEventListener('click', openZoom);
 el.zoomClose.addEventListener('click', closeZoom);
-
 el.zoomIn.addEventListener('click', ()=>{ zScale = Math.min(8, zScale*1.25); applyZoom(); });
 el.zoomOut.addEventListener('click', ()=>{ zScale = Math.max(0.5, zScale/1.25); applyZoom(); });
-
-/* ניווט מהאוברליי ללא reset */
 el.zoomPrev.addEventListener('click', ()=> step(-1));
 el.zoomNext.addEventListener('click', ()=> step(+1));
-
-/* גלגלת – זום */
-el.zoomOverlay.addEventListener('wheel', (e)=>{
-  e.preventDefault();
-  const dir = e.deltaY > 0 ? -1 : 1;
-  zScale = Math.min(8, Math.max(0.5, zScale * (dir>0 ? 1.1 : 1/1.1)));
-  applyZoom();
-},{passive:false});
-
-/* גרירה */
+el.zoomOverlay.addEventListener('wheel', (e)=>{ e.preventDefault(); const dir = e.deltaY > 0 ? -1 : 1; zScale = Math.min(8, Math.max(0.5, zScale * (dir>0 ? 1.1 : 1/1.1))); applyZoom(); }, {passive:false});
 el.zoomOverlay.addEventListener('pointerdown', (e)=>{ dragging=true; el.zoomOverlay.classList.add('grabbing'); lastX=e.clientX; lastY=e.clientY; });
-el.zoomOverlay.addEventListener('pointermove', (e)=>{
-  if(!dragging) return;
-  zX += (e.clientX - lastX);
-  zY += (e.clientY - lastY);
-  lastX = e.clientX; lastY = e.clientY;
-  applyZoom();
-});
+el.zoomOverlay.addEventListener('pointermove', (e)=>{ if(!dragging) return; zX += (e.clientX - lastX); zY += (e.clientY - lastY); lastX = e.clientX; lastY = e.clientY; applyZoom(); });
 ['pointerup','pointerleave','pointercancel'].forEach(ev=> el.zoomOverlay.addEventListener(ev, ()=>{ dragging=false; el.zoomOverlay.classList.remove('grabbing'); }));
-
-/* דאבל-קליק: טוגל 1x / 2x (רשות) */
-el.zoomOverlay.addEventListener('dblclick', ()=>{
-  zScale = (Math.abs(zScale-1)<0.01) ? 2 : 1;
-  zX=0; zY=0; applyZoom();
-});
+el.zoomOverlay.addEventListener('dblclick', ()=>{ zScale = (Math.abs(zScale-1)<0.01) ? 2 : 1; zX=0; zY=0; applyZoom(); });
 
 /* ===== INIT ===== */
 (async function init(){
@@ -360,7 +339,7 @@ el.zoomOverlay.addEventListener('dblclick', ()=>{
     if(urlFront && CFG.fronts.find(f=>f.key===urlFront)){ await openFront(urlFront); }
   }catch(err){
     console.error(err);
-    alert('שגיאה בטעינת התצורה. ודא שקיים updates.json תקין.');
+    alert('שגיאה בטעינת התצורה. ודא שקיים updates.json תקין וקובץ מפה ב-assets.');
   }
 })();
 </script>
